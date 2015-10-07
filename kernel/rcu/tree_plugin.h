@@ -298,7 +298,7 @@ static void rcu_preempt_note_context_switch(void)
 		/* Possibly blocking in an RCU read-side critical section. */
 		rdp = this_cpu_ptr(rcu_state_p->rda);
 		rnp = rdp->mynode;
-		raw_spin_lock_irqsave_rcu_node(rnp, flags);
+		raw_spin_lock_rcu_node(rnp);
 		t->rcu_read_unlock_special.b.blocked = true;
 		t->rcu_blocked_node = rnp;
 
