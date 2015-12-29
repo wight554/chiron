@@ -139,7 +139,7 @@ struct irq_domain;
  * @msi_desc:		MSI descriptor
  */
 struct irq_common_data {
-	unsigned int		state_use_accessors;
+	unsigned int		__private state_use_accessors;
 #ifdef CONFIG_NUMA
 	unsigned int		node;
 #endif
@@ -212,7 +212,7 @@ enum {
 	IRQD_AFFINITY_MANAGED		= (1 << 21),
 };
 
-#define __irqd_to_state(d)		((d)->common->state_use_accessors)
+#define __irqd_to_state(d) ACCESS_PRIVATE((d)->common, state_use_accessors)
 
 static inline bool irqd_is_setaffinity_pending(struct irq_data *d)
 {
@@ -307,6 +307,8 @@ static inline bool irqd_affinity_is_managed(struct irq_data *d)
 {
 	return __irqd_to_state(d) & IRQD_AFFINITY_MANAGED;
 }
+
+#undef __irqd_to_state
 
 static inline irq_hw_number_t irqd_to_hwirq(struct irq_data *d)
 {
