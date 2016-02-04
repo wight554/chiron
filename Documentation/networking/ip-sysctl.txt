@@ -1679,6 +1679,12 @@ use_optimistic - BOOLEAN
 		0: disabled (default)
 		1: enabled
 
+drop_unicast_in_l2_multicast - BOOLEAN
+	Drop any unicast IPv6 packets that are received in link-layer
+	multicast (or broadcast) frames.
+
+	By default this is turned off.
+
 stable_secret - IPv6 address
 	This IPv6 address will be used as a secret to generate IPv6
 	addresses for link-local addresses and autoconfigured
