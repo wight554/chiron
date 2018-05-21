@@ -1,4 +1,4 @@
-/*
+ /*
  *  Copyright (C) 2012-2013 Samsung Electronics Co., Ltd.
  *
  *  This program is free software; you can redistribute it and/or
@@ -4935,6 +4935,11 @@ static int __init sdfat_init_inodecache(void)
 
 static void sdfat_destroy_inodecache(void)
 {
+	/*
+         * Make sure all delayed rcu free inodes are flushed before we
+         * destroy cache.
+         */
+	rcu_barrier();
 	kmem_cache_destroy(sdfat_inode_cachep);
 }
 
