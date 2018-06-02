@@ -1661,7 +1661,7 @@ static void proc_get_req(tpAniSirGlobal pMac, uint16_t length, uint32_t *pParam)
 	uint32_t *pValue;
 
 	pe_debug("Rcvd cfg get request %d bytes", length);
-	for (i = 0; i < length / 4; i++)
+	for (i = 0; i < length / 4; i++) {
 		pe_debug("[%2d] 0x%08x", i, pParam[i]);
 
 		if (!pMac->cfg.gCfgStatus) {
@@ -1730,6 +1730,7 @@ static void proc_get_req(tpAniSirGlobal pMac, uint16_t length, uint32_t *pParam)
 				length -= sizeof(uint32_t);
 			}
 		}
+	}
 
 } /*** end procGetReq() ***/
 
