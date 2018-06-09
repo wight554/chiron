@@ -1875,13 +1875,19 @@ static void mdss_dsi_start_wake_thread(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 	ctrl_pdata->wake_thread = kthread_run(mdss_dsi_disp_wake_thread,
 						&ctrl_pdata->panel_data,
 						"mdss_disp_wake");
-	if (IS_ERR(ctrl_pdata->wake_thread))
+	if (IS_ERR(ctrl_pdata->wake_thread)) {
 		pr_err("%s: Failed to start disp-wake thread, rc=%ld\n",
 				__func__, PTR_ERR(ctrl_pdata->wake_thread));
+		ctrl_pdata->wake_thread = NULL;
+        }
 }
 
 static void mdss_dsi_display_wake(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
+	if (atomic_read(&ctrl_pdata->disp_is_on))
+		return;
+	atomic_set(&ctrl_pdata->disp_is_on, 1);
+
 	reinit_completion(&ctrl_pdata->wake_comp);
 
 	/* Make sure the thread is started since it's needed right now */
@@ -1904,9 +1910,7 @@ static int mdss_dsi_fb_unblank_cb(struct notifier_block *nb,
 	if (action != FB_EARLY_EVENT_BLANK)
 		return NOTIFY_OK;
 
-	ctrl_pdata->is_unblank = *blank == FB_BLANK_UNBLANK;
-
-	if (ctrl_pdata->is_unblank)
+	if (*blank == FB_BLANK_UNBLANK)
 		mdss_dsi_display_wake(ctrl_pdata);
 	else
 		mdss_dsi_start_wake_thread(ctrl_pdata);
@@ -2793,8 +2797,7 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 		break;
 	case MDSS_EVENT_LINK_READY:
 		/* The unblank notifier handles waking for unblank events */
-		if (!ctrl_pdata->is_unblank)
-			mdss_dsi_display_wake(ctrl_pdata);
+		mdss_dsi_display_wake(ctrl_pdata);
 		break;
 	case MDSS_EVENT_POST_PANEL_ON:
 		rc = mdss_dsi_post_panel_on(pdata);
@@ -2810,6 +2813,7 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 		if (ctrl_pdata->off_cmds.link_state == DSI_LP_MODE)
 			rc = mdss_dsi_blank(pdata, power_state);
 		rc = mdss_dsi_off(pdata, power_state);
+		atomic_set(&ctrl_pdata->disp_is_on, 0);
 		break;
 	case MDSS_EVENT_DISABLE_PANEL:
 		/* disable esd thread */
@@ -3390,17 +3394,6 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	init_completion(&ctrl_pdata->wake_comp);
-	init_waitqueue_head(&ctrl_pdata->wake_waitq);
-	ctrl_pdata->wake_notif.notifier_call = mdss_dsi_fb_unblank_cb;
-	ctrl_pdata->wake_notif.priority = INT_MAX - 1;
-	rc = fb_register_client(&ctrl_pdata->wake_notif);
-	if (rc) {
-		pr_err("%s: Failed to register unblank notifier, rc=%d\n",
-								__func__, rc);
-		return rc;
-	}
-
 	platform_set_drvdata(pdev, ctrl_pdata);
 
 	util = mdss_get_util_intf();
@@ -3552,6 +3545,10 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 		ctrl_pdata->shared_data->dsi1_active = true;
 
 	mdss_dsi_debug_bus_init(mdss_dsi_res);
+
+	ctrl_pdata->wake_notif.notifier_call = mdss_dsi_fb_unblank_cb;
+	ctrl_pdata->wake_notif.priority = INT_MAX - 1;
+	fb_register_client(&ctrl_pdata->wake_notif);
 
 	return 0;
 
@@ -4020,6 +4017,7 @@ static int mdss_dsi_ctrl_remove(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
+	fb_unregister_client(&ctrl_pdata->wake_notif);
 	mdss_dsi_pm_qos_remove_request(ctrl_pdata->shared_data);
 
 	if (msm_dss_config_vreg(&pdev->dev,
@@ -4559,6 +4557,9 @@ int dsi_panel_device_register(struct platform_device *ctrl_pdev,
 
 	pr_info("%s: Continuous splash %s\n", __func__,
 		pinfo->cont_splash_enabled ? "enabled" : "disabled");
+
+	init_completion(&ctrl_pdata->wake_comp);
+	init_waitqueue_head(&ctrl_pdata->wake_waitq);
 
 	rc = mdss_register_panel(ctrl_pdev, &(ctrl_pdata->panel_data));
 	if (rc) {

@@ -596,8 +596,8 @@ struct mdss_dsi_ctrl_pdata {
 	struct task_struct *wake_thread;
 	struct completion wake_comp;
 	wait_queue_head_t wake_waitq;
+	atomic_t disp_is_on;
 	atomic_t needs_wake;
-	bool is_unblank;
 };
 
 struct dsi_status_data {
