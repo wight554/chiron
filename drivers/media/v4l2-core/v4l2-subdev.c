@@ -35,7 +35,7 @@
 static int subdev_fh_init(struct v4l2_subdev_fh *fh, struct v4l2_subdev *sd)
 {
 #if defined(CONFIG_VIDEO_V4L2_SUBDEV_API)
-	fh->pad = kzalloc(sizeof(*fh->pad) * sd->entity.num_pads, GFP_KERNEL);
+	fh->pad = kcalloc(sd->entity.num_pads, sizeof(*fh->pad), GFP_KERNEL);
 	if (fh->pad == NULL)
 		return -ENOMEM;
 #endif

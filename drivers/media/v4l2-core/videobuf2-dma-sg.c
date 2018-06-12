@@ -125,7 +125,7 @@ static void *vb2_dma_sg_alloc(void *alloc_ctx, unsigned long size,
 	buf->num_pages = size >> PAGE_SHIFT;
 	buf->dma_sgt = &buf->sg_table;
 
-	buf->pages = kzalloc(buf->num_pages * sizeof(struct page *),
+	buf->pages = kcalloc(buf->num_pages, sizeof(struct page *),
 			     GFP_KERNEL);
 	if (!buf->pages)
 		goto fail_pages_array_alloc;
