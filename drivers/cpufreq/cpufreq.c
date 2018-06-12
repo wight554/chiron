@@ -712,6 +712,11 @@ static ssize_t store_##file_name					\
 	if (ret != 1)							\
 		return -EINVAL;						\
 									\
+	if (&new_policy.object == &new_policy.min) {			\
+		if (new_policy.cpu > 3)					\
+			new_policy.min = new_policy.min * 2 / 3;	\
+	}								\
+									\
 	temp = new_policy.object;					\
 	ret = cpufreq_set_policy(policy, &new_policy);		\
 	if (!ret)							\
