@@ -3816,8 +3816,10 @@ static void smblib_handle_hvdcp_detect_done(struct smb_charger *chg,
 
 static void smblib_force_legacy_icl(struct smb_charger *chg, int pst)
 {
+#ifndef CONFIG_MACH_XIAOMI_MSM8998
 	int typec_mode;
 	int rp_ua;
+#endif
 
 	/* while PD is active it should have complete ICL control */
 	if (chg->pd_active)
@@ -3844,10 +3846,12 @@ static void smblib_force_legacy_icl(struct smb_charger *chg, int pst)
 		vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true, 1500000);
 		break;
 	case POWER_SUPPLY_TYPE_USB_DCP:
+#ifndef CONFIG_MACH_XIAOMI_MSM8998
 		typec_mode = smblib_get_prop_typec_mode(chg);
 		rp_ua = get_rp_based_dcp_current(chg, typec_mode);
 		vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true, rp_ua);
 		break;
+#endif
 	case POWER_SUPPLY_TYPE_USB_FLOAT:
 		/*
 		 * limit ICL to 100mA, the USB driver will enumerate to check
@@ -4801,7 +4805,11 @@ static void smblib_legacy_detection_work(struct work_struct *work)
 		smblib_err(chg, "Couldn't enable type-c rc=%d\n", rc);
 
 	/* wait for type-c detection to complete */
+#ifdef CONFIG_MACH_XIAOMI_MSM8998
+	msleep(1000);
+#else
 	msleep(100);
+#endif
 
 	rc = smblib_read(chg, TYPE_C_STATUS_5_REG, &stat);
 	if (rc < 0) {

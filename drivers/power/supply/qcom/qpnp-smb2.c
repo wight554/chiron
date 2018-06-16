@@ -1483,7 +1483,6 @@ static int smb2_configure_typec(struct smb_charger *chg)
 		return rc;
 	}
 #endif
-
 	return rc;
 }
 
