@@ -32,7 +32,6 @@
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
 #include <linux/fb.h>
-#include <linux/sched.h>
 
 #include "gf_spi.h"
 
@@ -229,11 +228,6 @@ static const struct file_operations gf_fops = {
 };
 
 #define FINGERPRINT_PROCESSING_MS		2000
-static void gf_unboost_worker(struct work_struct *work)
-{
-	sched_set_boost(0);
-}
-
 static void gf_event_worker(struct work_struct *work)
 {
 	struct gf_device *gf_dev = container_of(work, typeof(*gf_dev), event_work);
@@ -264,20 +258,13 @@ static void gf_event_worker(struct work_struct *work)
 		break;
 	/*
 	 * IRQs are followed by fingerprint procesing, hold a wakelock to make
-	 * sure the fingerprint is processed when screen is off. Also,
-	 * run a sched boost to speed it up.
+	 * sure the fingerprint is processed when screen is off.
 	 */
 	case GF_NET_EVENT_IRQ:
 		if (gf_dev->display_on)
 			break;
 
 		wake_lock_timeout(&gf_dev->fp_wakelock,
-				msecs_to_jiffies(FINGERPRINT_PROCESSING_MS));
-		
-		cancel_delayed_work(&gf_dev->unboost_work);
-		sched_set_boost(1);
-		queue_delayed_work(system_power_efficient_wq,
-				&gf_dev->unboost_work,
 				msecs_to_jiffies(FINGERPRINT_PROCESSING_MS));
 		break;
 	}
@@ -470,7 +457,6 @@ static int gf_probe(struct platform_device *pdev)
 	gf_dev->event_workqueue = alloc_workqueue("gf-event-wq",
 			WQ_MEM_RECLAIM | WQ_HIGHPRI, 0);
 	INIT_WORK(&gf_dev->event_work, gf_event_worker);
-	INIT_DELAYED_WORK(&gf_dev->unboost_work, gf_unboost_worker);
 
 	wake_lock_init(&gf_dev->fp_wakelock, WAKE_LOCK_SUSPEND, "fp_wakelock");
 
