@@ -221,6 +221,18 @@ int sched_boost_handler(struct ctl_table *table, int write,
 	}
 #endif
 
+#ifdef CONFIG_DYNAMIC_STUNE_BOOST
+	if (verify_boost_params(old_val, *data)) {
+		if (*data > 0)
+			stune_boost("top-app");
+		else
+			reset_stune_boost("top-app");
+	} else {
+		*data = old_val;
+		ret = -EINVAL;
+	}
+#endif // CONFIG_DYNAMIC_STUNE_BOOST
+
 done:
 #ifdef CONFIG_SCHED_HMP
 	mutex_unlock(&boost_mutex);
