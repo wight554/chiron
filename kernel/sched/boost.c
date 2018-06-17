@@ -11,9 +11,11 @@
  */
 
 #include "sched.h"
+#ifdef CONFIG_SCHED_HMP
 #include <linux/of.h>
 #include <linux/sched/core_ctl.h>
 #include <trace/events/sched.h>
+#endif
 
 /*
  * Scheduler boost is a mechanism to temporarily place tasks on CPUs
@@ -23,6 +25,7 @@
  */
 
 unsigned int sysctl_sched_boost;
+#ifdef CONFIG_SCHED_HMP
 static enum sched_boost_policy boost_policy;
 static enum sched_boost_policy boost_policy_dt = SCHED_BOOST_NONE;
 static DEFINE_MUTEX(boost_mutex);
@@ -102,7 +105,9 @@ enum sched_boost_policy sched_boost_policy(void)
 {
 	return boost_policy;
 }
+#endif
 
+#if defined CONFIG_SCHED_HMP || defined CONFIG_DYNAMIC_STUNE_BOOST
 static bool verify_boost_params(int old_val, int new_val)
 {
 	/*
@@ -112,7 +117,9 @@ static bool verify_boost_params(int old_val, int new_val)
 	 */
 	return !(!!old_val == !!new_val);
 }
+#endif
 
+#ifdef CONFIG_SCHED_HMP
 static void _sched_set_boost(int old_val, int type)
 {
 	switch (type) {
@@ -182,6 +189,7 @@ int sched_set_boost(int type)
 	mutex_unlock(&boost_mutex);
 	return ret;
 }
+#endif
 
 int sched_boost_handler(struct ctl_table *table, int write,
 		void __user *buffer, size_t *lenp,
@@ -191,27 +199,38 @@ int sched_boost_handler(struct ctl_table *table, int write,
 	unsigned int *data = (unsigned int *)table->data;
 	unsigned int old_val;
 
+#ifdef CONFIG_SCHED_HMP
 	mutex_lock(&boost_mutex);
+#endif
 
+	// Backup current sysctl_sched_boost value
 	old_val = *data;
+
+	// Set new sysctl_sched_boost value
 	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
 
 	if (ret || !write)
 		goto done;
 
+#ifdef CONFIG_SCHED_HMP
 	if (verify_boost_params(old_val, *data)) {
 		_sched_set_boost(old_val, *data);
 	} else {
 		*data = old_val;
 		ret = -EINVAL;
 	}
+#endif
 
 done:
+#ifdef CONFIG_SCHED_HMP
 	mutex_unlock(&boost_mutex);
+#endif
 	return ret;
 }
 
+#ifdef CONFIG_SCHED_HMP
 int sched_boost(void)
 {
 	return sysctl_sched_boost;
 }
+#endif
