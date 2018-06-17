@@ -436,17 +436,17 @@ static void msm_sysstats_resume(void)
 		rpm_stats_copy_data(&rs, m);
 		memcpy(stat_type, &rs.stat_type, sizeof(uint32_t));
 		pr_info("RPM Mode:%s\n", stat_type);
-		pr_info("\tcount:%d\n", rs.count);
+		pr_info("    count:%d\n", rs.count);
 	}
 
 	for (n = 0; n < ss.num_masters; n++) {
 		master_stats_copy_data(&ms, n);
 		pr_info("%s\n", ss.master[n]);
-		pr_info("\tWakeup interrupt:0x%llX\n", ms.wakeup_ind);
-		pr_info("\tXO Count:0x%x\n", ms.xo_count);
-		pr_info("\tWakeup Reason:0x%s\n", ms.wakeup_reason ? "Sched" : "Rude");
-		pr_info("\tNum Shutdowns:0x%x\n", ms.numshutdowns);
-		pr_info("\tActive Cores:0x%x\n", ms.active_cores);
+		pr_info("    Wakeup interrupt:0x%llX\n", ms.wakeup_ind);
+		pr_info("    XO Count:0x%x\n", ms.xo_count);
+		pr_info("    Wakeup Reason:0x%s\n", ms.wakeup_reason ? "Sched" : "Rude");
+		pr_info("    Num Shutdowns:0x%x\n", ms.numshutdowns);
+		pr_info("    Active Cores:0x%x\n", ms.active_cores);
 	}
 }
 
