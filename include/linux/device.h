@@ -661,7 +661,7 @@ static inline void *devm_kmalloc_array(struct device *dev,
 {
 	if (size != 0 && n > SIZE_MAX / size)
 		return NULL;
-	return devm_kmalloc_array(dev, size, n, flags);
+	return devm_kmalloc(dev, size, n, flags);
 }
 static inline void *devm_kcalloc(struct device *dev,
 				 size_t n, size_t size, gfp_t flags)
