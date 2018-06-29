@@ -1444,8 +1444,8 @@ struct ctl_table_header *__register_sysctl_paths(
 		if (header)
 			header->ctl_table_arg = ctl_table_arg;
 	} else {
-		header = kzalloc(CHECKME_struct_size(&*header, *subheaders, nr_subheaders),
-				 GFP_KERNEL);
+	    header = kzalloc(sizeof(*header) +
+		     sizeof(*subheaders)*nr_subheaders, GFP_KERNEL);
 		if (!header)
 			goto out;
 

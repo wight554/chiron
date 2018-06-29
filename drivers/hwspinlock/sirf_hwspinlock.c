@@ -63,7 +63,7 @@ static int sirf_hwspinlock_probe(struct platform_device *pdev)
 		return -ENODEV;
 
 	hwspin = devm_kzalloc(&pdev->dev,
-			      CHECKME_struct_size(&*hwspin, *hwlock, HW_SPINLOCK_NUMBER),
+			      struct_size(hwspin, lock, HW_SPINLOCK_NUMBER),
 			      GFP_KERNEL);
 	if (!hwspin)
 		return -ENOMEM;
