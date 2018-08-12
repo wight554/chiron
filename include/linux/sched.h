@@ -1591,13 +1591,6 @@ struct tlbflush_unmap_batch {
 };
 
 struct task_struct {
-#ifdef CONFIG_THREAD_INFO_IN_TASK
-	/*
-	 * For reasons of header soup (see current_thread_info()), this
-	 * must be the first element of task_struct.
-	 */
-	struct thread_info thread_info;
-#endif
 	volatile long state;	/* -1 unrunnable, 0 runnable, >0 stopped */
 	void *stack;
 	atomic_t usage;
@@ -1607,9 +1600,6 @@ struct task_struct {
 #ifdef CONFIG_SMP
 	struct llist_node wake_entry;
 	int on_cpu;
-#ifdef CONFIG_THREAD_INFO_IN_TASK
-	unsigned int cpu;	/* current CPU */
-#endif
 	unsigned int wakee_flips;
 	unsigned long wakee_flip_decay_ts;
 	struct task_struct *last_wakee;
@@ -2668,9 +2658,7 @@ extern void set_curr_task(int cpu, struct task_struct *p);
 void yield(void);
 
 union thread_union {
-#ifndef CONFIG_THREAD_INFO_IN_TASK
 	struct thread_info thread_info;
-#endif
 	unsigned long stack[THREAD_SIZE/sizeof(long)];
 };
 
@@ -2912,7 +2900,11 @@ static inline void set_task_comm(struct task_struct *tsk, const char *from)
 {
 	__set_task_comm(tsk, from, false);
 }
-extern char *get_task_comm(char *to, struct task_struct *tsk);
+extern char *__get_task_comm(char *to, size_t len, struct task_struct *tsk);
+#define get_task_comm(buf, tsk) ({			\
+	BUILD_BUG_ON(sizeof(buf) != TASK_COMM_LEN);	\
+	__get_task_comm(buf, sizeof(buf), tsk);		\
+})
 
 #ifdef CONFIG_SMP
 void scheduler_ipi(void);
@@ -3065,34 +3057,10 @@ static inline void threadgroup_change_end(struct task_struct *tsk)
 	cgroup_threadgroup_change_end(tsk);
 }
 
-#ifdef CONFIG_THREAD_INFO_IN_TASK
-
-static inline struct thread_info *task_thread_info(struct task_struct *task)
-{
-	return &task->thread_info;
-}
-
-/*
- * When accessing the stack of a non-current task that might exit, use
- * try_get_task_stack() instead.  task_stack_page will return a pointer
- * that could get freed out from under you.
- */
-static inline void *task_stack_page(const struct task_struct *task)
-{
-	return task->stack;
-}
-
-#define setup_thread_stack(new,old)	do { } while(0)
-
-static inline unsigned long *end_of_stack(const struct task_struct *task)
-{
-	return task->stack;
-}
-
-#elif !defined(__HAVE_THREAD_FUNCTIONS)
+#ifndef __HAVE_THREAD_FUNCTIONS
 
 #define task_thread_info(task)	((struct thread_info *)(task)->stack)
-#define task_stack_page(task)	((void *)(task)->stack)
+#define task_stack_page(task)	((task)->stack)
 
 static inline void setup_thread_stack(struct task_struct *p, struct task_struct *org)
 {
@@ -3401,11 +3369,7 @@ static inline void ptrace_signal_wake_up(struct task_struct *t, bool resume)
 
 static inline unsigned int task_cpu(const struct task_struct *p)
 {
-#ifdef CONFIG_THREAD_INFO_IN_TASK
-	return p->cpu;
-#else
 	return task_thread_info(p)->cpu;
-#endif
 }
 
 static inline int task_node(const struct task_struct *p)
