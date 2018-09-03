@@ -21,9 +21,6 @@
 /* Free at least 64 MiB per low memory event */
 #define MIN_FREE_PAGES (64UL * SZ_1M / PAGE_SIZE)
 
-/* Maximum number of tasks that can be killed per ADJ per low memory event */
-#define MAX_ADJ_KILLCNT (50)
-
 /* Time until LMK can be triggered again after reclaim is finished */
 #define POST_KILL_TIMEOUT_MS (20)
 
@@ -62,9 +59,8 @@ static bool test_task_flag(struct task_struct *p, int flag)
 static unsigned long scan_and_kill(int min_adj, int max_adj,
 	unsigned long pages_needed)
 {
-	struct task_struct *tsk, *tasks_to_kill[MAX_ADJ_KILLCNT];
+	struct task_struct *tsk;
 	unsigned long pages_freed = 0;
-	int task_idx = 0;
 
 	rcu_read_lock();
 	for_each_process(tsk) {
@@ -94,21 +90,13 @@ static unsigned long scan_and_kill(int min_adj, int max_adj,
 		if (tasksize <= 0)
 			continue;
 
-		get_task_struct(p);
-		tasks_to_kill[task_idx++] = p;
+		do_send_sig_info(SIGKILL, SEND_SIG_FORCED, p, true);
 
 		pages_freed += tasksize;
-		if (task_idx == MAX_ADJ_KILLCNT || pages_freed >= pages_needed)
+		if (pages_freed >= pages_needed)
 			break;
 	}
 	rcu_read_unlock();
-
-	for (; task_idx > 0; task_idx--) {
-		struct task_struct *p = tasks_to_kill[task_idx - 1];
-
-		do_send_sig_info(SIGKILL, SEND_SIG_FORCED, p, true);
-		put_task_struct(p);
-	}
 
 	return pages_freed;
 }
