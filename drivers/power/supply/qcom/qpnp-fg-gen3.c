@@ -2359,7 +2359,7 @@ static void esr_filter_work(struct work_struct *work)
 {
 	struct fg_chip *chip = container_of(work,
 			struct fg_chip, esr_filter_work);
-	int rc, batt_temp;
+	int rc, batt_temp = 0;
 
 	rc = fg_get_battery_temp(chip, &batt_temp);
 	if (rc < 0) {
@@ -3302,7 +3302,7 @@ module_param_cb(restart, &fg_restart_ops, &fg_restart, 0644);
 static int fg_get_time_to_full_locked(struct fg_chip *chip, int *val)
 {
 	int rc, ibatt_avg, vbatt_avg, rbatt, msoc, full_soc, act_cap_mah,
-		i_cc2cv, soc_cc2cv, tau, divisor, iterm, ttf_mode,
+		i_cc2cv = 0, soc_cc2cv, tau, divisor, iterm, ttf_mode,
 		i, soc_per_step, msoc_this_step, msoc_next_step,
 		ibatt_this_step, t_predicted_this_step, ttf_slope,
 		t_predicted_cv, t_predicted = 0;
