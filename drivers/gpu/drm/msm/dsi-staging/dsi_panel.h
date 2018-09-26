@@ -173,6 +173,8 @@ struct dsi_panel {
 	struct dsi_panel_dba dba_config;
 
 	bool lp11_init;
+
+	struct timespec wait_until_ts;
 };
 
 struct dsi_panel *dsi_panel_get(struct device *parent,

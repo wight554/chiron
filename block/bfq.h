@@ -1,5 +1,5 @@
 /*
- * BFQ-v8r5 for 4.4.0: data structures and common functions prototypes.
+ * BFQ v8r12 for 4.4.0: data structures and common functions prototypes.
  *
  * Based on ideas and code from CFQ:
  * Copyright (C) 2003 Jens Axboe <axboe@kernel.dk>
@@ -9,7 +9,7 @@
  *
  * Copyright (C) 2015 Paolo Valente <paolo.valente@unimore.it>
  *
- * Copyright (C) 2016 Paolo Valente <paolo.valente@linaro.org>
+ * Copyright (C) 2017 Paolo Valente <paolo.valente@linaro.org>
  */
 
 #ifndef _BFQ_H
@@ -68,17 +68,30 @@ struct bfq_service_tree {
  *
  * bfq_sched_data is the basic scheduler queue.  It supports three
  * ioprio_classes, and can be used either as a toplevel queue or as an
- * intermediate queue on a hierarchical setup.  @next_in_service
- * points to the active entity of the sched_data service trees that
- * will be scheduled next. It is used to reduce the number of steps
- * needed for each hierarchical-schedule update.
+ * intermediate queue in a hierarchical setup.
  *
  * The supported ioprio_classes are the same as in CFQ, in descending
  * priority order, IOPRIO_CLASS_RT, IOPRIO_CLASS_BE, IOPRIO_CLASS_IDLE.
  * Requests from higher priority queues are served before all the
  * requests from lower priority queues; among requests of the same
  * queue requests are served according to B-WF2Q+.
- * All the fields are protected by the queue lock of the containing bfqd.
+ *
+ * The schedule is implemented by the service trees, plus the field
+ * @next_in_service, which points to the entity on the active trees
+ * that will be served next, if 1) no changes in the schedule occurs
+ * before the current in-service entity is expired, 2) the in-service
+ * queue becomes idle when it expires, and 3) if the entity pointed by
+ * in_service_entity is not a queue, then the in-service child entity
+ * of the entity pointed by in_service_entity becomes idle on
+ * expiration. This peculiar definition allows for the following
+ * optimization, not yet exploited: while a given entity is still in
+ * service, we already know which is the best candidate for next
+ * service among the other active entitities in the same parent
+ * entity. We can then quickly compare the timestamps of the
+ * in-service entity with those of such best candidate.
+ *
+ * All the fields are protected by the queue lock of the containing
+ * bfqd.
  */
 struct bfq_sched_data {
 	struct bfq_entity *in_service_entity;  /* entity in service */
@@ -86,6 +99,9 @@ struct bfq_sched_data {
 	struct bfq_entity *next_in_service;
 	/* array of service trees, one per ioprio_class */
 	struct bfq_service_tree service_tree[BFQ_IOPRIO_CLASSES];
+	/* last time CLASS_IDLE was served */
+	unsigned long bfq_class_idle_last_service;
+
 };
 
 /**
@@ -135,10 +151,10 @@ struct bfq_entity {
 	struct bfq_weight_counter *weight_counter;
 
 	/*
-	 * flag, true if the entity is on a tree (either the active or
-	 * the idle one of its service_tree).
+	 * Flag, true if the entity is on a tree (either the active or
+	 * the idle one of its service_tree) or is in service.
 	 */
-	int on_st;
+	bool on_st;
 
 	u64 finish; /* B-WF2Q+ finish timestamp (aka F_i) */
 	u64 start;  /* B-WF2Q+ start timestamp (aka S_i) */
@@ -333,11 +349,11 @@ struct bfq_io_cq {
 #endif
 
 	/*
-	 * Snapshot of the idle window before merging; taken to
-	 * remember this value while the queue is merged, so as to be
-	 * able to restore it in case of split.
+	 * Snapshot of the has_short_time flag before merging; taken
+	 * to remember its value while the queue is merged, so as to
+	 * be able to restore it in case of split.
 	 */
-	bool saved_idle_window;
+	bool saved_has_short_ttime;
 	/*
 	 * Same purpose as the previous two fields for the I/O bound
 	 * classification of a queue.
@@ -361,6 +377,7 @@ struct bfq_io_cq {
 	unsigned long saved_wr_coeff;
 	unsigned long saved_last_wr_start_finish;
 	unsigned long saved_wr_start_at_switch_to_srt;
+	unsigned int saved_wr_cur_max_time;
 };
 
 enum bfq_device_speed {
@@ -485,8 +502,6 @@ struct bfq_data {
 	unsigned int bfq_back_max;
 	/* maximum idling time */
 	u32 bfq_slice_idle;
-	/* last time CLASS_IDLE was served */
-	u64 bfq_class_idle_last_service;
 
 	/* user-configured max budget value (0 for auto-tuning) */
 	int bfq_user_max_budget;
@@ -595,7 +610,7 @@ enum bfqq_state_flags {
 					     */
 	BFQ_BFQQ_FLAG_must_alloc,	/* must be allowed rq alloc */
 	BFQ_BFQQ_FLAG_fifo_expire,	/* FIFO checked in this slice */
-	BFQ_BFQQ_FLAG_idle_window,	/* slice idling enabled */
+	BFQ_BFQQ_FLAG_has_short_ttime,	/* queue has a short think time */
 	BFQ_BFQQ_FLAG_sync,		/* synchronous queue */
 	BFQ_BFQQ_FLAG_IO_bound,		/*
 					 * bfqq has timed-out at least once
@@ -634,7 +649,7 @@ BFQ_BFQQ_FNS(wait_request);
 BFQ_BFQQ_FNS(non_blocking_wait_rq);
 BFQ_BFQQ_FNS(must_alloc);
 BFQ_BFQQ_FNS(fifo_expire);
-BFQ_BFQQ_FNS(idle_window);
+BFQ_BFQQ_FNS(has_short_ttime);
 BFQ_BFQQ_FNS(sync);
 BFQ_BFQQ_FNS(IO_bound);
 BFQ_BFQQ_FNS(in_large_burst);
@@ -644,6 +659,43 @@ BFQ_BFQQ_FNS(softrt_update);
 #undef BFQ_BFQQ_FNS
 
 /* Logging facilities. */
+#ifdef CONFIG_BFQ_REDIRECT_TO_CONSOLE
+#ifdef CONFIG_BFQ_GROUP_IOSCHED
+static struct bfq_group *bfqq_group(struct bfq_queue *bfqq);
+static struct blkcg_gq *bfqg_to_blkg(struct bfq_group *bfqg);
+
+#define bfq_log_bfqq(bfqd, bfqq, fmt, args...)	do {			\
+	char __pbuf[128];						\
+									\
+	assert_spin_locked((bfqd)->queue->queue_lock);			\
+	blkg_path(bfqg_to_blkg(bfqq_group(bfqq)), __pbuf, sizeof(__pbuf)); \
+	pr_crit("bfq%d%c %s " fmt "\n", 			\
+		(bfqq)->pid,						\
+		bfq_bfqq_sync((bfqq)) ? 'S' : 'A',			\
+		__pbuf, ##args);					\
+} while (0)
+
+#define bfq_log_bfqg(bfqd, bfqg, fmt, args...)	do {			\
+	char __pbuf[128];						\
+									\
+	blkg_path(bfqg_to_blkg(bfqg), __pbuf, sizeof(__pbuf));		\
+	pr_crit("%s " fmt "\n", __pbuf, ##args);	\
+} while (0)
+
+#else /* CONFIG_BFQ_GROUP_IOSCHED */
+
+#define bfq_log_bfqq(bfqd, bfqq, fmt, args...)		\
+	pr_crit("bfq%d%c " fmt "\n", (bfqq)->pid,		\
+		bfq_bfqq_sync((bfqq)) ? 'S' : 'A',	\
+		##args)
+#define bfq_log_bfqg(bfqd, bfqg, fmt, args...)		do {} while (0)
+
+#endif /* CONFIG_BFQ_GROUP_IOSCHED */
+
+#define bfq_log(bfqd, fmt, args...) \
+	pr_crit("bfq " fmt "\n", ##args)
+
+#else /* CONFIG_BFQ_REDIRECT_TO_CONSOLE */
 #ifdef CONFIG_BFQ_GROUP_IOSCHED
 static struct bfq_group *bfqq_group(struct bfq_queue *bfqq);
 static struct blkcg_gq *bfqg_to_blkg(struct bfq_group *bfqg);
@@ -678,6 +730,7 @@ static struct blkcg_gq *bfqg_to_blkg(struct bfq_group *bfqg);
 
 #define bfq_log(bfqd, fmt, args...) \
 	blk_add_trace_msg((bfqd)->queue, "bfq " fmt, ##args)
+#endif /* CONFIG_BFQ_REDIRECT_TO_CONSOLE */
 
 /* Expiration reasons. */
 enum bfqq_expiration {
@@ -803,13 +856,20 @@ struct bfq_group {
 
 static struct bfq_queue *bfq_entity_to_bfqq(struct bfq_entity *entity);
 
+static unsigned int bfq_class_idx(struct bfq_entity *entity)
+{
+	struct bfq_queue *bfqq = bfq_entity_to_bfqq(entity);
+
+	return bfqq ? bfqq->ioprio_class - 1 :
+		BFQ_DEFAULT_GRP_CLASS - 1;
+}
+
 static struct bfq_service_tree *
 bfq_entity_service_tree(struct bfq_entity *entity)
 {
 	struct bfq_sched_data *sched_data = entity->sched_data;
 	struct bfq_queue *bfqq = bfq_entity_to_bfqq(entity);
-	unsigned int idx = bfqq ? bfqq->ioprio_class - 1 :
-				  BFQ_DEFAULT_GRP_CLASS - 1;
+	unsigned int idx = bfq_class_idx(entity);
 
 	BUG_ON(idx >= BFQ_IOPRIO_CLASSES);
 	BUG_ON(sched_data == NULL);
