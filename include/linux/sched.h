@@ -2049,6 +2049,9 @@ struct task_struct {
 	int pagefault_disabled;
 	atomic64_t *concurrent_active_time;
 	atomic64_t *concurrent_policy_time;
+#ifdef CONFIG_ANDROID_SIMPLE_LMK
+	bool lmk_sigkill_sent;
+#endif
 /* CPU-specific state of this task */
 	struct thread_struct thread;
 /*
