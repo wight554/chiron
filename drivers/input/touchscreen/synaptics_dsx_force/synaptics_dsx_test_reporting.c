@@ -3480,7 +3480,7 @@ static short FindMedian(short *pdata, int num)
 	short *value;
 	short median;
 
-	value = (short *) kcalloc(num, sizeof(short), GFP_KERNEL);
+	value = (short *)kzalloc(num * sizeof(short), GFP_KERNEL);
 
 	for (i = 0; i < num; i++)
 		*(value + i) = *(pdata + i);
@@ -3528,34 +3528,28 @@ static int tddi_ratio_calculation(signed short *p_image)
 		goto exit;
 	}
 
-	p_right_median = (signed short *) kcalloc(rx_num, sizeof(short),
-						  GFP_KERNEL);
+	p_right_median = (signed short *) kzalloc(rx_num * sizeof(short), GFP_KERNEL);
 	if (!p_right_median) {
 		dev_err(rmi4_data->pdev->dev.parent, "%s: Failed to alloc mem for p_right_median\n", __func__);
 		retval = -ENOMEM;
 		goto exit;
 	}
 
-	p_left_median = (signed short *) kcalloc(rx_num, sizeof(short),
-						 GFP_KERNEL);
+	p_left_median = (signed short *) kzalloc(rx_num * sizeof(short), GFP_KERNEL);
 	if (!p_left_median) {
 		dev_err(rmi4_data->pdev->dev.parent, "%s: Failed to alloc mem for p_left_median\n", __func__);
 		retval = -ENOMEM;
 		goto exit;
 	}
 
-	p_right_column_buf = (signed short *) kcalloc(right_size * rx_num,
-						      sizeof(short),
-						      GFP_KERNEL);
+	p_right_column_buf = (signed short *) kzalloc(right_size * rx_num * sizeof(short), GFP_KERNEL);
 	if (!p_right_column_buf) {
 		dev_err(rmi4_data->pdev->dev.parent, "%s: Failed to alloc mem for p_right_column_buf\n", __func__);
 		retval = -ENOMEM;
 		goto exit;
 	}
 
-	p_left_column_buf = (signed short *) kcalloc(left_size * rx_num,
-						     sizeof(short),
-						     GFP_KERNEL);
+	p_left_column_buf = (signed short *) kzalloc(left_size * rx_num * sizeof(short), GFP_KERNEL);
 	if (!p_left_column_buf) {
 		dev_err(rmi4_data->pdev->dev.parent, "%s: Failed to alloc mem for p_left_column_buf\n", __func__);
 		retval = -ENOMEM;
@@ -3656,7 +3650,7 @@ static ssize_t test_sysfs_tddi_extend_ee_short_store(struct device *dev,
 	if (td43xx_ee_short_data)
 		kfree(td43xx_ee_short_data);
 
-	td43xx_ee_short_data = kcalloc(rx_num, tx_num, GFP_KERNEL);
+	td43xx_ee_short_data = kzalloc(tx_num * rx_num, GFP_KERNEL);
 	if (!td43xx_ee_short_data) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for td43xx_ee_short_data\n",
@@ -3940,7 +3934,7 @@ static ssize_t test_sysfs_td43xx_ee_short_store(struct device *dev,
 
 	if (td43xx_ee_short_data)
 		kfree(td43xx_ee_short_data);
-	td43xx_ee_short_data = kcalloc(rx_num, tx_num, GFP_KERNEL);
+	td43xx_ee_short_data = kzalloc(tx_num * rx_num, GFP_KERNEL);
 	if (!td43xx_ee_short_data) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for td43xx_ee_short_data\n",
@@ -4326,8 +4320,7 @@ static int tddi_amp_open_data_testing_b7(signed short *p_image,
 		tx_num -= 1;
 	}
 
-	p_right_median = (signed short *) kcalloc(rx_num, sizeof(short),
-						  GFP_KERNEL);
+	p_right_median = (signed short *) kzalloc(rx_num * sizeof(short), GFP_KERNEL);
 	if (!p_right_median) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for right_median\n",
@@ -4336,8 +4329,7 @@ static int tddi_amp_open_data_testing_b7(signed short *p_image,
 		goto exit;
 	}
 
-	p_left_median = (signed short *) kcalloc(rx_num, sizeof(short),
-						 GFP_KERNEL);
+	p_left_median = (signed short *) kzalloc(rx_num * sizeof(short), GFP_KERNEL);
 	if (!p_left_median) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for left_median\n",
@@ -4346,9 +4338,7 @@ static int tddi_amp_open_data_testing_b7(signed short *p_image,
 		goto exit;
 	}
 
-	p_right_column_buf = (signed short *) kcalloc(right_size * rx_num,
-						      sizeof(short),
-						      GFP_KERNEL);
+	p_right_column_buf = (signed short *) kzalloc(right_size * rx_num * sizeof(short), GFP_KERNEL);
 	if (!p_right_column_buf) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for left_column_buf\n",
@@ -4357,9 +4347,7 @@ static int tddi_amp_open_data_testing_b7(signed short *p_image,
 		goto exit;
 	}
 
-	p_left_column_buf = (signed short *) kcalloc(left_size * rx_num,
-						     sizeof(short),
-						     GFP_KERNEL);
+	p_left_column_buf = (signed short *) kzalloc(left_size * rx_num * sizeof(short), GFP_KERNEL);
 	if (!p_left_column_buf) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for left_column_buf\n",
@@ -4485,7 +4473,7 @@ static ssize_t test_sysfs_td4722_b7_amp_open_store(struct device *dev,
 
 	if (td43xx_amp_open_data)
 		kfree(td43xx_amp_open_data);
-	td43xx_amp_open_data = kcalloc(rx_num, tx_num, GFP_KERNEL);
+	td43xx_amp_open_data = kzalloc(tx_num * rx_num, GFP_KERNEL);
 	if (!td43xx_amp_open_data) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for td43xx_amp_open_data\n",
@@ -4493,7 +4481,7 @@ static ssize_t test_sysfs_td4722_b7_amp_open_store(struct device *dev,
 		return -ENOMEM;
 	}
 
-	p_report_data_8 = kzalloc(array3_size(tx_num, rx_num, 2), GFP_KERNEL);
+	p_report_data_8 = kzalloc(tx_num * rx_num * 2, GFP_KERNEL);
 	if (!p_report_data_8) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for p_report_data_8\n",
@@ -4502,8 +4490,7 @@ static ssize_t test_sysfs_td4722_b7_amp_open_store(struct device *dev,
 		goto exit;
 	}
 
-	p_rt92_image_1 = kcalloc(tx_num * rx_num, sizeof(signed short),
-				 GFP_KERNEL);
+	p_rt92_image_1 = kzalloc(tx_num * rx_num * sizeof(signed short), GFP_KERNEL);
 	if (!p_rt92_image_1) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for p_rt92_image_1\n",
@@ -4512,8 +4499,7 @@ static ssize_t test_sysfs_td4722_b7_amp_open_store(struct device *dev,
 		goto exit;
 	}
 
-	p_rt92_image_2 = kcalloc(tx_num * rx_num, sizeof(signed short),
-				 GFP_KERNEL);
+	p_rt92_image_2 = kzalloc(tx_num * rx_num * sizeof(signed short), GFP_KERNEL);
 	if (!p_rt92_image_2) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for p_rt92_image_2\n",
@@ -4522,7 +4508,7 @@ static ssize_t test_sysfs_td4722_b7_amp_open_store(struct device *dev,
 		goto exit;
 	}
 
-	p_result_1 = kcalloc(rx_num, tx_num, GFP_KERNEL);
+	p_result_1 = kzalloc(tx_num * rx_num, GFP_KERNEL);
 	if (!p_result_1) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for p_result_1\n",
@@ -4530,7 +4516,7 @@ static ssize_t test_sysfs_td4722_b7_amp_open_store(struct device *dev,
 		return -ENOMEM;
 	}
 
-	p_result_2 = kcalloc(rx_num, tx_num, GFP_KERNEL);
+	p_result_2 = kzalloc(tx_num * rx_num, GFP_KERNEL);
 	if (!p_result_2) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for p_result_2\n",
@@ -4787,8 +4773,7 @@ static int tddi_amp_open_data_testing(signed short *p_image)
 		goto exit;
 	}
 
-	p_right_median = (signed short *) kcalloc(rx_num, sizeof(short),
-						  GFP_KERNEL);
+	p_right_median = (signed short *) kzalloc(rx_num * sizeof(short), GFP_KERNEL);
 	if (!p_right_median) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for right_median\n",
@@ -4797,8 +4782,7 @@ static int tddi_amp_open_data_testing(signed short *p_image)
 		goto exit;
 	}
 
-	p_left_median = (signed short *) kcalloc(rx_num, sizeof(short),
-						 GFP_KERNEL);
+	p_left_median = (signed short *) kzalloc(rx_num * sizeof(short), GFP_KERNEL);
 	if (!p_left_median) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for left_median\n",
@@ -4807,9 +4791,7 @@ static int tddi_amp_open_data_testing(signed short *p_image)
 		goto exit;
 	}
 
-	p_right_column_buf = (signed short *) kcalloc(right_size * rx_num,
-						      sizeof(short),
-						      GFP_KERNEL);
+	p_right_column_buf = (signed short *) kzalloc(right_size * rx_num * sizeof(short), GFP_KERNEL);
 	if (!p_right_column_buf) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for left_column_buf\n",
@@ -4818,9 +4800,7 @@ static int tddi_amp_open_data_testing(signed short *p_image)
 		goto exit;
 	}
 
-	p_left_column_buf = (signed short *) kcalloc(left_size * rx_num,
-						     sizeof(short),
-						     GFP_KERNEL);
+	p_left_column_buf = (signed short *) kzalloc(left_size * rx_num * sizeof(short), GFP_KERNEL);
 	if (!p_left_column_buf) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for left_column_buf\n",
@@ -4950,7 +4930,7 @@ static ssize_t test_sysfs_td43xx_amp_open_store(struct device *dev,
 
 	if (td43xx_amp_open_data)
 		kfree(td43xx_amp_open_data);
-	td43xx_amp_open_data = kcalloc(rx_num, tx_num, GFP_KERNEL);
+	td43xx_amp_open_data = kzalloc(tx_num * rx_num, GFP_KERNEL);
 	if (!td43xx_amp_open_data) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for td43xx_amp_open_data\n",
@@ -4958,7 +4938,7 @@ static ssize_t test_sysfs_td43xx_amp_open_store(struct device *dev,
 		return -ENOMEM;
 	}
 
-	p_report_data_8 = kzalloc(array3_size(tx_num, rx_num, 2), GFP_KERNEL);
+	p_report_data_8 = kzalloc(tx_num * rx_num * 2, GFP_KERNEL);
 	if (!p_report_data_8) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for p_report_data_8\n",
@@ -4968,8 +4948,7 @@ static ssize_t test_sysfs_td43xx_amp_open_store(struct device *dev,
 	}
 	memset(p_report_data_8, 0x00, tx_num * rx_num * 2);
 
-	p_rt92_delta_image = kcalloc(tx_num * rx_num, sizeof(signed short),
-				     GFP_KERNEL);
+	p_rt92_delta_image = kzalloc(tx_num * rx_num * sizeof(signed short), GFP_KERNEL);
 	if (!p_rt92_delta_image) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for p_rt92_delta_image\n",
@@ -4979,8 +4958,7 @@ static ssize_t test_sysfs_td43xx_amp_open_store(struct device *dev,
 	}
 	memset(p_rt92_delta_image, 0x00, tx_num * rx_num * sizeof(signed short));
 
-	p_rt92_image_1 = kcalloc(tx_num * rx_num, sizeof(signed short),
-				 GFP_KERNEL);
+	p_rt92_image_1 = kzalloc(tx_num * rx_num * sizeof(signed short), GFP_KERNEL);
 	if (!p_rt92_image_1) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for p_rt92_image_1\n",
@@ -4990,8 +4968,7 @@ static ssize_t test_sysfs_td43xx_amp_open_store(struct device *dev,
 	}
 	memset(p_rt92_image_1, 0x00, tx_num * rx_num * sizeof(signed short));
 
-	p_rt92_image_2 = kcalloc(tx_num * rx_num, sizeof(signed short),
-				 GFP_KERNEL);
+	p_rt92_image_2 = kzalloc(tx_num * rx_num * sizeof(signed short), GFP_KERNEL);
 	if (!p_rt92_image_2) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for p_rt92_image_2\n",
@@ -5223,7 +5200,7 @@ static ssize_t test_sysfs_tddi_amp_electrode_open_store(struct device *dev,
 
 	if (td43xx_amp_open_data)
 		kfree(td43xx_amp_open_data);
-	td43xx_amp_open_data = kcalloc(rx_num, tx_num, GFP_KERNEL);
+	td43xx_amp_open_data = kzalloc(tx_num * rx_num, GFP_KERNEL);
 	if (!td43xx_amp_open_data) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for td43xx_amp_open_data\n",
@@ -5231,7 +5208,7 @@ static ssize_t test_sysfs_tddi_amp_electrode_open_store(struct device *dev,
 		return -ENOMEM;
 	}
 
-	p_report_data_8 = kzalloc(array3_size(tx_num, rx_num, 2), GFP_KERNEL);
+	p_report_data_8 = kzalloc(tx_num * rx_num * 2, GFP_KERNEL);
 	if (!p_report_data_8) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for p_report_data_8\n",
@@ -5240,8 +5217,7 @@ static ssize_t test_sysfs_tddi_amp_electrode_open_store(struct device *dev,
 		goto exit;
 	}
 
-	p_rt92_delta_image = kcalloc(tx_num * rx_num, sizeof(signed short),
-				     GFP_KERNEL);
+	p_rt92_delta_image = kzalloc(tx_num * rx_num * sizeof(signed short), GFP_KERNEL);
 	if (!p_rt92_delta_image) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for p_rt92_delta_image\n",
@@ -5250,8 +5226,7 @@ static ssize_t test_sysfs_tddi_amp_electrode_open_store(struct device *dev,
 		goto exit;
 	}
 
-	p_rt92_image_1 = kcalloc(tx_num * rx_num, sizeof(signed short),
-				 GFP_KERNEL);
+	p_rt92_image_1 = kzalloc(tx_num * rx_num * sizeof(signed short), GFP_KERNEL);
 	if (!p_rt92_image_1) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for p_rt92_image_1\n",
@@ -5260,8 +5235,7 @@ static ssize_t test_sysfs_tddi_amp_electrode_open_store(struct device *dev,
 		goto exit;
 	}
 
-	p_rt92_image_2 = kcalloc(tx_num * rx_num, sizeof(signed short),
-				 GFP_KERNEL);
+	p_rt92_image_2 = kzalloc(tx_num * rx_num * sizeof(signed short), GFP_KERNEL);
 	if (!p_rt92_image_2) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for p_rt92_image_2\n",
@@ -5683,8 +5657,7 @@ static ssize_t test_sysfs_abs_0d_open_w_autoservo_store(struct device *dev,
 	/* allocate the g_tddi_amp_open_data_output */
 	if (g_abs_0d_open_data_output)
 		kfree(g_abs_0d_open_data_output);
-	g_abs_0d_open_data_output = kcalloc(button_count, sizeof(int),
-					    GFP_KERNEL);
+	g_abs_0d_open_data_output = kzalloc(button_count * sizeof(int), GFP_KERNEL);
 	if (!g_abs_0d_open_data_output) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for g_abs_0d_open_data_output\n",
@@ -5695,7 +5668,7 @@ static ssize_t test_sysfs_abs_0d_open_w_autoservo_store(struct device *dev,
 	g_flag_read_report_fail = 0;
 
 	/* allocate the buffer */
-	p_report_data_8 = kzalloc(array3_size(tx_num, rx_num, 2), GFP_KERNEL);
+	p_report_data_8 = kzalloc(tx_num * rx_num * 2, GFP_KERNEL);
 	if (!p_report_data_8) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for p_report_data_8\n",
@@ -5704,8 +5677,7 @@ static ssize_t test_sysfs_abs_0d_open_w_autoservo_store(struct device *dev,
 		goto exit;
 	}
 
-	p_rt92_image_1 = kcalloc(tx_num * rx_num, sizeof(signed short),
-				 GFP_KERNEL);
+	p_rt92_image_1 = kzalloc(tx_num * rx_num * sizeof(signed short), GFP_KERNEL);
 	if (!p_rt92_image_1) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for p_rt92_image_1\n",
@@ -5714,8 +5686,7 @@ static ssize_t test_sysfs_abs_0d_open_w_autoservo_store(struct device *dev,
 		goto exit;
 	}
 
-	p_rt92_image_2 = kcalloc(tx_num * rx_num, sizeof(signed short),
-				 GFP_KERNEL);
+	p_rt92_image_2 = kzalloc(tx_num * rx_num * sizeof(signed short), GFP_KERNEL);
 	if (!p_rt92_image_2) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for p_rt92_image_2\n",

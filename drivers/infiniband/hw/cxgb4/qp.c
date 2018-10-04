@@ -216,15 +216,15 @@ static int create_qp(struct c4iw_rdev *rdev, struct t4_wq *wq,
 	}
 
 	if (!user) {
-		wq->sq.sw_sq = kcalloc(wq->sq.size, sizeof(*wq->sq.sw_sq),
-				       GFP_KERNEL);
+		wq->sq.sw_sq = kzalloc(wq->sq.size * sizeof *wq->sq.sw_sq,
+				 GFP_KERNEL);
 		if (!wq->sq.sw_sq) {
 			ret = -ENOMEM;
 			goto free_rq_qid;
 		}
 
-		wq->rq.sw_rq = kcalloc(wq->rq.size, sizeof(*wq->rq.sw_rq),
-				       GFP_KERNEL);
+		wq->rq.sw_rq = kzalloc(wq->rq.size * sizeof *wq->rq.sw_rq,
+				 GFP_KERNEL);
 		if (!wq->rq.sw_rq) {
 			ret = -ENOMEM;
 			goto free_sw_sq;
@@ -1183,6 +1183,12 @@ static void flush_qp(struct c4iw_qp *qhp)
 
 	t4_set_wq_in_error(&qhp->wq);
 	if (qhp->ibqp.uobject) {
+
+		/* for user qps, qhp->wq.flushed is protected by qhp->mutex */
+		if (qhp->wq.flushed)
+			return;
+
+		qhp->wq.flushed = 1;
 		t4_set_cq_in_error(&rchp->cq);
 		spin_lock_irqsave(&rchp->comp_handler_lock, flag);
 		(*rchp->ibcq.comp_handler)(&rchp->ibcq, rchp->ibcq.cq_context);

@@ -974,11 +974,25 @@ int reuse_swap_page(struct page *page)
 	count = page_mapcount(page);
 	if (count <= 1 && PageSwapCache(page)) {
 		count += page_swapcount(page);
-		if (count == 1 && !PageWriteback(page)) {
+		if (count != 1)
+			goto out;
+		if (!PageWriteback(page)) {
 			delete_from_swap_cache(page);
 			SetPageDirty(page);
+		} else {
+			swp_entry_t entry;
+			struct swap_info_struct *p;
+
+			entry.val = page_private(page);
+			p = swap_info_get(entry);
+			if (p->flags & SWP_STABLE_WRITES) {
+				spin_unlock(&p->lock);
+				return false;
+			}
+			spin_unlock(&p->lock);
 		}
 	}
+out:
 	return count <= 1;
 }
 
@@ -2524,6 +2538,10 @@ SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
 		error = -ENOMEM;
 		goto bad_swap;
 	}
+
+	if (bdi_cap_stable_pages_required(inode_to_bdi(inode)))
+		p->flags |= SWP_STABLE_WRITES;
+
 	if (p->bdev && blk_queue_nonrot(bdev_get_queue(p->bdev))) {
 		int cpu;
 
@@ -2534,7 +2552,8 @@ SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
 		 */
 		p->cluster_next = 1 + (prandom_u32() % p->highest_bit);
 
-		cluster_info = vzalloc(array_size(sizeof(*cluster_info), DIV_ROUND_UP(maxpages, SWAPFILE_CLUSTER)));
+		cluster_info = vzalloc(DIV_ROUND_UP(maxpages,
+			SWAPFILE_CLUSTER) * sizeof(*cluster_info));
 		if (!cluster_info) {
 			error = -ENOMEM;
 			goto bad_swap;
@@ -2563,7 +2582,7 @@ SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
 	}
 	/* frontswap enabled? set up bit-per-page map for frontswap */
 	if (frontswap_enabled)
-		frontswap_map = vzalloc(array_size(sizeof(long), BITS_TO_LONGS(maxpages)));
+		frontswap_map = vzalloc(BITS_TO_LONGS(maxpages) * sizeof(long));
 
 	if (p->bdev &&(swap_flags & SWAP_FLAG_DISCARD) && swap_discardable(p)) {
 		/*

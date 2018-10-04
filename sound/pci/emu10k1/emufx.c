@@ -2520,7 +2520,7 @@ static int snd_emu10k1_fx8010_ioctl(struct snd_hwdep * hw, struct file *file, un
 		emu->support_tlv = 1;
 		return put_user(SNDRV_EMU10K1_VERSION, (int __user *)argp);
 	case SNDRV_EMU10K1_IOCTL_INFO:
-		info = kmalloc(sizeof(*info), GFP_KERNEL);
+		info = kzalloc(sizeof(*info), GFP_KERNEL);
 		if (!info)
 			return -ENOMEM;
 		snd_emu10k1_fx8010_info(emu, info);
@@ -2663,16 +2663,16 @@ int snd_emu10k1_efx_alloc_pm_buffer(struct snd_emu10k1 *emu)
 	int len;
 
 	len = emu->audigy ? 0x200 : 0x100;
-	emu->saved_gpr = kmalloc_array(len, 4, GFP_KERNEL);
+	emu->saved_gpr = kmalloc(len * 4, GFP_KERNEL);
 	if (! emu->saved_gpr)
 		return -ENOMEM;
 	len = emu->audigy ? 0x100 : 0xa0;
-	emu->tram_val_saved = kmalloc_array(len, 4, GFP_KERNEL);
-	emu->tram_addr_saved = kmalloc_array(len, 4, GFP_KERNEL);
+	emu->tram_val_saved = kmalloc(len * 4, GFP_KERNEL);
+	emu->tram_addr_saved = kmalloc(len * 4, GFP_KERNEL);
 	if (! emu->tram_val_saved || ! emu->tram_addr_saved)
 		return -ENOMEM;
 	len = emu->audigy ? 2 * 1024 : 2 * 512;
-	emu->saved_icode = vmalloc(array_size(len, 4));
+	emu->saved_icode = vmalloc(len * 4);
 	if (! emu->saved_icode)
 		return -ENOMEM;
 	return 0;

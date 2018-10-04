@@ -382,19 +382,19 @@ static int alienware_zone_init(struct platform_device *dev)
 	 *      - zone_data num_zones is for the distinct zones
 	 */
 	zone_dev_attrs =
-	    kcalloc(quirks->num_zones + 1, sizeof(struct device_attribute),
+	    kzalloc(sizeof(struct device_attribute) * (quirks->num_zones + 1),
 		    GFP_KERNEL);
 	if (!zone_dev_attrs)
 		return -ENOMEM;
 
 	zone_attrs =
-	    kcalloc(quirks->num_zones + 2, sizeof(struct attribute *),
+	    kzalloc(sizeof(struct attribute *) * (quirks->num_zones + 2),
 		    GFP_KERNEL);
 	if (!zone_attrs)
 		return -ENOMEM;
 
 	zone_data =
-	    kcalloc(quirks->num_zones, sizeof(struct platform_zone),
+	    kzalloc(sizeof(struct platform_zone) * (quirks->num_zones),
 		    GFP_KERNEL);
 	if (!zone_data)
 		return -ENOMEM;
@@ -463,6 +463,7 @@ static acpi_status alienware_hdmi_command(struct hdmi_args *in_args,
 		if (obj && obj->type == ACPI_TYPE_INTEGER)
 			*out_data = (u32) obj->integer.value;
 	}
+	kfree(output.pointer);
 	return status;
 
 }
