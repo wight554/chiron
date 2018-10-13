@@ -69,8 +69,7 @@
 #include "xhci.h"
 #include "xhci-trace.h"
 extern void kick_usbpd_vbus_sm(void);
-extern unsigned int connected_usb_idVendor;
-extern int connected_usb_idProduct;
+extern bool is_xiaomi_headset;
 
 /*
  * Returns zero if the TRB isn't in this segment, otherwise it returns the DMA
@@ -285,8 +284,9 @@ void xhci_ring_cmd_db(struct xhci_hcd *xhci)
 
 static bool xhci_mod_cmd_timer(struct xhci_hcd *xhci, unsigned long delay)
 {
-	if (connected_usb_idVendor == 0x2717 && connected_usb_idProduct == 0x3801)
+	if (is_xiaomi_headset)
 		delay = msecs_to_jiffies(1000);
+
 	return mod_delayed_work(system_wq, &xhci->cmd_timer, delay);
 }
 
@@ -366,12 +366,10 @@ static int xhci_abort_cmd_ring(struct xhci_hcd *xhci, unsigned long flags)
 	 * seconds), then it should assume that the there are
 	 * larger problems with the xHC and assert HCRST.
 	 */
-	if (connected_usb_idVendor == 0x2717 && connected_usb_idProduct == 0x3801) {
+	if (is_xiaomi_headset) {
 		delay = 500 * 1000;
-		pr_err("xhci_abort_cmd_ring em headset\n");
 	} else {
 		delay = 5000 * 1000;
-		pr_err("xhci_abort_cmd_ring other\n");
 	}
 
 	ret = xhci_handshake(&xhci->op_regs->cmd_ring,
@@ -379,7 +377,7 @@ static int xhci_abort_cmd_ring(struct xhci_hcd *xhci, unsigned long flags)
 
 	if (ret < 0) {
 		/* we are about to kill xhci, give it one more chance */
-		if (delay == 500 * 1000)
+		if (is_xiaomi_headset)
 			return -EPERM;
 
 		xhci_write_64(xhci, temp_64 | CMD_RING_ABORT,
@@ -1315,13 +1313,14 @@ void xhci_handle_command_timeout(struct work_struct *work)
 		xhci->cmd_ring_state = CMD_RING_STATE_ABORTED;
 		xhci_dbg(xhci, "Command timeout\n");
 		ret = xhci_abort_cmd_ring(xhci, flags);
-		if (ret == -1) {
+		if (ret == -EPERM) {
 			xhci_err(xhci, "Abort command ring failed reset usb device\n");
 			xhci_cleanup_command_queue(xhci);
 			spin_unlock_irqrestore(&xhci->lock, flags);
 			kick_usbpd_vbus_sm();
 			return;
 		}
+
 		if (unlikely(ret == -ESHUTDOWN)) {
 			xhci_err(xhci, "Abort command ring failed\n");
 			xhci_cleanup_command_queue(xhci);

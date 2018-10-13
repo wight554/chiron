@@ -108,9 +108,10 @@ static void hub_release(struct kref *kref);
 static int usb_reset_and_verify_device(struct usb_device *udev);
 static int hub_port_disable(struct usb_hub *hub, int port1, int set_state);
 
-unsigned int connected_usb_idVendor = 0;
-unsigned int connected_usb_idProduct = 0;
-unsigned int connected_usb_devnum = 0xff;
+#define USB_VENDOR_XIAOMI		0x2717
+#define USB_PRODUCT_XIAOMI_HEADSET	0x3801
+
+bool is_xiaomi_headset = false;
 
 static inline char *portspeed(struct usb_hub *hub, int portstatus)
 {
@@ -2110,11 +2111,9 @@ void usb_disconnect(struct usb_device **pdev)
 	dev_info(&udev->dev, "USB disconnect, device number %d\n",
 			udev->devnum);
 
-	if (connected_usb_devnum == udev->devnum) {
+	if (is_xiaomi_headset) {
 		dev_info(&udev->dev, "xiaomi headset removed, devnum %d\n", udev->devnum);
-		connected_usb_idVendor = 0;
-		connected_usb_idProduct = 0;
-		connected_usb_devnum = 0xff;
+		is_xiaomi_headset = false;
 	}
 
 	/*
@@ -2444,12 +2443,10 @@ int usb_new_device(struct usb_device *udev)
 	udev->dev.devt = MKDEV(USB_DEVICE_MAJOR,
 			(((udev->bus->busnum-1) * 128) + (udev->devnum-1)));
 
-	if ((0x2717 == le16_to_cpu(udev->descriptor.idVendor))
-			 && (0x3801 == le16_to_cpu(udev->descriptor.idProduct))) {
-		connected_usb_idVendor = le16_to_cpu(udev->descriptor.idVendor);
-		connected_usb_idProduct = le16_to_cpu(udev->descriptor.idProduct);
-		connected_usb_devnum = udev->devnum;
+	if (USB_VENDOR_XIAOMI == le16_to_cpu(udev->descriptor.idVendor)
+			 && USB_PRODUCT_XIAOMI_HEADSET == le16_to_cpu(udev->descriptor.idProduct)) {
 		dev_info(&udev->dev, "xiaomi headset identified, devnum %d\n", udev->devnum);
+		is_xiaomi_headset = true;
 	}
 
 	/* Tell the world! */
