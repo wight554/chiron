@@ -28,7 +28,6 @@
 #include <sound/q6adm-v2.h>
 #include <sound/q6asm-v2.h>
 #include <sound/q6afe-v2.h>
-#include <sound/q6common.h>
 #include <sound/tlv.h>
 #include <sound/asound.h>
 #include <sound/pcm_params.h>
@@ -83,7 +82,6 @@ static int msm_route_ext_ec_ref;
 static bool is_custom_stereo_on;
 static bool is_ds2_on;
 static bool swap_ch;
-static int msm_native_mode;
 
 #define WEIGHT_0_DB 0x4000
 /* all the FEs which can support channel mixer */
@@ -3499,65 +3497,6 @@ static const struct snd_kcontrol_new channel_mixer_controls[] = {
 	.private_value = (unsigned long)&(mm1_ch8_enum)
 	},
 };
-
-static int msm_native_mode_get(struct snd_kcontrol *kcontrol,
-				struct snd_ctl_elem_value *ucontrol)
-{
-	switch (msm_native_mode) {
-	case 3:
-	case 2:
-	case 1:
-		ucontrol->value.integer.value[0] = msm_native_mode;
-		break;
-	default:
-		ucontrol->value.integer.value[0] = 0;
-		break;
-	}
-
-	pr_debug("%s: msm_native_mode = %d ucontrol value %ld\n",
-		__func__, msm_native_mode,
-		ucontrol->value.integer.value[0]);
-	return 0;
-}
-
-static int msm_native_mode_put(struct snd_kcontrol *kcontrol,
-				struct snd_ctl_elem_value *ucontrol)
-{
-	/* native flag shift from bit 11 in flags when open adm
-	 * 1 << 11: use bit width native mode
-	 * 2 << 11: use channel native mode
-	 * 3 << 11: use bit width and channel native mode
-	*/
-	switch (ucontrol->value.integer.value[0]) {
-	case 3:
-	case 2:
-	case 1:
-		msm_native_mode = ucontrol->value.integer.value[0];
-		break;
-	default:
-		msm_native_mode = 0;
-		break;
-	}
-
-	pr_debug("%s: msm_native_mode = %d ucontrol value %ld\n",
-		__func__, msm_native_mode,
-		ucontrol->value.integer.value[0]);
-	adm_set_native_mode(msm_native_mode);
-	return 0;
-}
-
-static const char *const native_mode_text[] = {"NonNative", "NativeBit",
-		"NativeCh", "NativeChBit"};
-
-static const struct soc_enum native_mode_enum[] = {
-	SOC_ENUM_SINGLE_EXT(4, native_mode_text),
-};
-
-static const struct snd_kcontrol_new native_mode_controls[] = {
-	SOC_ENUM_EXT("Native Mode Config", native_mode_enum[0],
-		msm_native_mode_get, msm_native_mode_put),
-};
-
 static int msm_ec_ref_ch_get(struct snd_kcontrol *kcontrol,
 			       struct snd_ctl_elem_value *ucontrol)
 {
@@ -11660,23 +11599,22 @@ int msm_routing_get_rms_value_control(struct snd_kcontrol *kcontrol,
 	int be_idx = 0;
 	char *param_value;
 	int *update_param_value;
-	uint32_t param_size = (RMS_PAYLOAD_LEN + 1) * sizeof(uint32_t);
-	struct param_hdr_v3 param_hdr = {0};
-
-	param_value = kzalloc(param_size, GFP_KERNEL);
-	if (!param_value)
+	uint32_t param_length = sizeof(uint32_t);
+	uint32_t param_payload_len = RMS_PAYLOAD_LEN * sizeof(uint32_t);
+	param_value = kzalloc(param_length + param_payload_len, GFP_KERNEL);
+	if (!param_value) {
+		pr_err("%s, param memory alloc failed\n", __func__);
 		return -ENOMEM;
-
+	}
 	for (be_idx = 0; be_idx < MSM_BACKEND_DAI_MAX; be_idx++)
 		if (msm_bedais[be_idx].port_id == SLIMBUS_0_TX)
 			break;
 	if ((be_idx < MSM_BACKEND_DAI_MAX) && msm_bedais[be_idx].active) {
-		param_hdr.module_id = RMS_MODULEID_APPI_PASSTHRU;
-		param_hdr.instance_id = INSTANCE_ID_0;
-		param_hdr.param_id = RMS_PARAM_FIRST_SAMPLE;
-		param_hdr.param_size = param_size;
-		rc = adm_get_pp_params(SLIMBUS_0_TX, 0, ADM_CLIENT_ID_DEFAULT,
-				       NULL, &param_hdr, (u8 *) param_value);
+		rc = adm_get_params(SLIMBUS_0_TX, 0,
+				RMS_MODULEID_APPI_PASSTHRU,
+				RMS_PARAM_FIRST_SAMPLE,
+				param_length + param_payload_len,
+				param_value);
 		if (rc) {
 			pr_err("%s: get parameters failed:%d\n", __func__, rc);
 			kfree(param_value);
@@ -16697,47 +16635,6 @@ static const struct snd_kcontrol_new stereo_channel_reverse_control[] = {
 	msm_routing_stereo_channel_reverse_control_put),
 };
 
-static int msm_routing_instance_id_support_info(struct snd_kcontrol *kcontrol,
-						struct snd_ctl_elem_info *uinfo)
-{
-	uinfo->type = SNDRV_CTL_ELEM_TYPE_BOOLEAN;
-	uinfo->count = 1;
-	return 0;
-}
-
-static int msm_routing_instance_id_support_put(
-	struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
-{
-	bool supported = ucontrol->value.integer.value[0] ? true : false;
-
-	q6common_update_instance_id_support(supported);
-
-	return 0;
-}
-
-static int msm_routing_instance_id_support_get(
-	struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
-{
-	bool supported = false;
-
-	supported = q6common_is_instance_id_supported();
-	ucontrol->value.integer.value[0] = supported ? 1 : 0;
-
-	return 0;
-}
-
-static const struct snd_kcontrol_new
-	msm_routing_feature_support_mixer_controls[] = {
-		{
-			.access = SNDRV_CTL_ELEM_ACCESS_READ |
-				  SNDRV_CTL_ELEM_ACCESS_WRITE,
-			.info = msm_routing_instance_id_support_info,
-			.name = "Instance ID Support",
-			.put = msm_routing_instance_id_support_put,
-			.get = msm_routing_instance_id_support_get,
-		},
-};
-
 static struct snd_pcm_ops msm_routing_pcm_ops = {
 	.hw_params	= msm_pcm_routing_hw_params,
 	.close          = msm_pcm_routing_close,
@@ -16994,9 +16891,6 @@ static int msm_routing_probe(struct snd_soc_platform *platform)
 	snd_soc_add_platform_controls(platform, channel_mixer_controls,
 				ARRAY_SIZE(channel_mixer_controls));
 
-	snd_soc_add_platform_controls(platform, native_mode_controls,
-				ARRAY_SIZE(native_mode_controls));
-
 	msm_qti_pp_add_controls(platform);
 
 	msm_dts_srs_tm_add_controls(platform);
@@ -17024,9 +16918,6 @@ static int msm_routing_probe(struct snd_soc_platform *platform)
 					ARRAY_SIZE(aptx_dec_license_controls));
 	snd_soc_add_platform_controls(platform, stereo_channel_reverse_control,
 				ARRAY_SIZE(stereo_channel_reverse_control));
-	snd_soc_add_platform_controls(
-		platform, msm_routing_feature_support_mixer_controls,
-		ARRAY_SIZE(msm_routing_feature_support_mixer_controls));
 
 	return 0;
 }
