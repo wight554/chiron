@@ -1,14 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (C) 2018, Sultan Alsawaf <sultanxda@gmail.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * Copyright (C) 2018 Sultan Alsawaf <sultan@kerneltoast.com>.
  */
 
 #define pr_fmt(fmt) "simple_lmk: " fmt
@@ -21,10 +13,15 @@
 #include <linux/sched.h>
 #include <linux/simple_lmk.h>
 
-#define MIN_FREE_PAGES (CONFIG_ANDROID_SIMPLE_LMK_MINFREE * SZ_1M / PAGE_SIZE)
-
 /* Duration to boost CPU and DDR bus to the max per memory reclaim event */
 #define BOOST_DURATION_MS (250)
+
+#define MIN_FREE_PAGES (CONFIG_ANDROID_SIMPLE_LMK_MINFREE * SZ_1M / PAGE_SIZE)
+
+#define KSWAPD_LMK_EXPIRES \
+	msecs_to_jiffies(CONFIG_ANDROID_SIMPLE_LMK_KSWAPD_TIMEOUT)
+#define OOM_LMK_EXPIRES \
+	msecs_to_jiffies(CONFIG_ANDROID_SIMPLE_LMK_OOM_TIMEOUT)
 
 /* Pulled from the Android framework */
 static const short int adj_prio[] = {
@@ -49,7 +46,7 @@ static unsigned long last_reclaim_jiffies;
 static atomic_t simple_lmk_ready = ATOMIC_INIT(0);
 
 static unsigned long scan_and_kill(int min_adj, int max_adj,
-	unsigned long pages_needed)
+				   unsigned long pages_needed)
 {
 	/* Boost priority of victim tasks so they can die quickly */
 	static const struct sched_param param = {
@@ -119,7 +116,7 @@ static unsigned long do_lmk_reclaim(unsigned long pages_needed)
 
 	for (i = 1; i < ARRAY_SIZE(adj_prio); i++) {
 		pages_freed += scan_and_kill(adj_prio[i], adj_prio[i - 1],
-					pages_needed - pages_freed);
+					     pages_needed - pages_freed);
 		if (pages_freed >= pages_needed)
 			break;
 	}
@@ -133,17 +130,17 @@ static void simple_lmk_reclaim_work(struct work_struct *work)
 	unsigned long mib_freed = 0;
 
 	mutex_lock(&reclaim_lock);
-	if (time_after_eq(jiffies, last_reclaim_jiffies + LMK_KSWAPD_TIMEOUT))
+	if (time_after_eq(jiffies, last_reclaim_jiffies + KSWAPD_LMK_EXPIRES))
 		mib_freed = do_lmk_reclaim(MIN_FREE_PAGES);
 	mutex_unlock(&reclaim_lock);
 
 	if (mib_freed)
 		pr_info("kswapd: freed %lu MiB\n", mib_freed);
 
-	queue_delayed_work(simple_lmk_wq, &reclaim_work, LMK_KSWAPD_TIMEOUT);
+	queue_delayed_work(simple_lmk_wq, &reclaim_work, KSWAPD_LMK_EXPIRES);
 }
 
-void simple_lmk_force_reclaim(void)
+void simple_lmk_one_reclaim(void)
 {
 	unsigned long mib_freed = 0;
 
@@ -154,7 +151,7 @@ void simple_lmk_force_reclaim(void)
 	if (!mutex_trylock(&reclaim_lock))
 		return;
 
-	if (time_after_eq(jiffies, last_reclaim_jiffies + LMK_OOM_TIMEOUT))
+	if (time_after_eq(jiffies, last_reclaim_jiffies + OOM_LMK_EXPIRES))
 		mib_freed = do_lmk_reclaim(MIN_FREE_PAGES);
 	mutex_unlock(&reclaim_lock);
 
@@ -167,7 +164,7 @@ void simple_lmk_start_reclaim(void)
 	if (!atomic_read(&simple_lmk_ready))
 		return;
 
-	queue_delayed_work(simple_lmk_wq, &reclaim_work, LMK_KSWAPD_TIMEOUT);
+	queue_delayed_work(simple_lmk_wq, &reclaim_work, KSWAPD_LMK_EXPIRES);
 }
 
 void simple_lmk_stop_reclaim(void)
