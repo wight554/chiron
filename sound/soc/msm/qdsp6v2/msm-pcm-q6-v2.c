@@ -35,6 +35,7 @@
 #include <linux/of_device.h>
 #include <sound/tlv.h>
 #include <sound/pcm_params.h>
+#include <sound/q6core.h>
 
 #include "msm-pcm-q6-v2.h"
 #include "msm-pcm-routing-v2.h"
@@ -384,11 +385,10 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 			return -ENOMEM;
 		}
 	} else {
-		ret = q6asm_open_write_v4(prtd->audio_client,
-			fmt_type, bits_per_sample);
-
+		ret = q6asm_open_write_with_retry(prtd->audio_client,
+				fmt_type, bits_per_sample);
 		if (ret < 0) {
-			pr_err("%s: q6asm_open_write_v4 failed (%d)\n",
+			pr_err("%s: q6asm_open_write_with_retry failed (%d)\n",
 			__func__, ret);
 			q6asm_audio_client_free(prtd->audio_client);
 			prtd->audio_client = NULL;
@@ -425,7 +425,16 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 			runtime->channels, !prtd->set_channel_map,
 			prtd->channel_map, bits_per_sample);
 	} else {
-		ret = q6asm_media_format_block_multi_ch_pcm_v4(
+		if (q6asm_get_svc_version(APR_SVC_ASM) >=
+				ADSP_ASM_API_VERSION_V2)
+			ret = q6asm_media_format_block_multi_ch_pcm_v5(
+				prtd->audio_client, runtime->rate,
+				runtime->channels, !prtd->set_channel_map,
+				prtd->channel_map, bits_per_sample,
+				sample_word_size, ASM_LITTLE_ENDIAN,
+				DEFAULT_QF);
+		else
+			ret = q6asm_media_format_block_multi_ch_pcm_v4(
 				prtd->audio_client, runtime->rate,
 				runtime->channels, !prtd->set_channel_map,
 				prtd->channel_map, bits_per_sample,
@@ -489,8 +498,9 @@ static int msm_pcm_capture_prepare(struct snd_pcm_substream *substream)
 				__func__, params_channels(params),
 				prtd->audio_client->perf_mode);
 
-		ret = q6asm_open_read_v4(prtd->audio_client, FORMAT_LINEAR_PCM,
-				bits_per_sample, false);
+		ret = q6asm_open_read_with_retry(prtd->audio_client,
+					FORMAT_LINEAR_PCM,
+					bits_per_sample, false);
 		if (ret < 0) {
 			pr_err("%s: q6asm_open_read failed\n", __func__);
 			q6asm_audio_client_free(prtd->audio_client);
@@ -557,13 +567,25 @@ static int msm_pcm_capture_prepare(struct snd_pcm_substream *substream)
 	pr_debug("%s: Samp_rate = %d Channel = %d bit width = %d, word size = %d\n",
 			__func__, prtd->samp_rate, prtd->channel_mode,
 			bits_per_sample, sample_word_size);
-	ret = q6asm_enc_cfg_blk_pcm_format_support_v4(prtd->audio_client,
-						      prtd->samp_rate,
-						      prtd->channel_mode,
-						      bits_per_sample,
-						      sample_word_size,
-						      ASM_LITTLE_ENDIAN,
-						      DEFAULT_QF);
+	if (q6asm_get_svc_version(APR_SVC_ASM) >=
+				ADSP_ASM_API_VERSION_V2)
+		ret = q6asm_enc_cfg_blk_pcm_format_support_v5(
+					prtd->audio_client,
+					prtd->samp_rate,
+					prtd->channel_mode,
+					bits_per_sample,
+					sample_word_size,
+					ASM_LITTLE_ENDIAN,
+					DEFAULT_QF);
+	else
+		ret = q6asm_enc_cfg_blk_pcm_format_support_v4(
+					prtd->audio_client,
+					prtd->samp_rate,
+					prtd->channel_mode,
+					bits_per_sample,
+					sample_word_size,
+					ASM_LITTLE_ENDIAN,
+					DEFAULT_QF);
 	if (ret < 0)
 		pr_debug("%s: cmd cfg pcm was block failed", __func__);
 
@@ -2269,7 +2291,7 @@ static int msm_pcm_channel_mixer_output_map_ctl_put(
 	}
 
 	chmixer_pspd = &(pdata->chmixer_pspd[fe_id][session_type]);
-	for (i = 0; i < PCM_FORMAT_MAX_NUM_CHANNEL; i++)
+	for (i = 0; i < PCM_FORMAT_MAX_NUM_CHANNEL_V2; i++)
 		chmixer_pspd->out_ch_map[i] =
 			ucontrol->value.integer.value[i];
 
@@ -2300,7 +2322,7 @@ static int msm_pcm_channel_mixer_output_map_ctl_get(
 	}
 
 	chmixer_pspd = &(pdata->chmixer_pspd[fe_id][session_type]);
-	for (i = 0; i < PCM_FORMAT_MAX_NUM_CHANNEL; i++)
+	for (i = 0; i < PCM_FORMAT_MAX_NUM_CHANNEL_V2; i++)
 		ucontrol->value.integer.value[i] =
 			chmixer_pspd->out_ch_map[i];
 	return 0;
@@ -2330,7 +2352,7 @@ static int msm_pcm_channel_mixer_input_map_ctl_put(
 	}
 
 	chmixer_pspd = &(pdata->chmixer_pspd[fe_id][session_type]);
-	for (i = 0; i < PCM_FORMAT_MAX_NUM_CHANNEL; i++)
+	for (i = 0; i < PCM_FORMAT_MAX_NUM_CHANNEL_V2; i++)
 		chmixer_pspd->in_ch_map[i] = ucontrol->value.integer.value[i];
 
 	return 0;
@@ -2360,7 +2382,7 @@ static int msm_pcm_channel_mixer_input_map_ctl_get(
 	}
 
 	chmixer_pspd = &(pdata->chmixer_pspd[fe_id][session_type]);
-	for (i = 0; i < PCM_FORMAT_MAX_NUM_CHANNEL; i++)
+	for (i = 0; i < PCM_FORMAT_MAX_NUM_CHANNEL_V2; i++)
 		ucontrol->value.integer.value[i] =
 			chmixer_pspd->in_ch_map[i];
 	return 0;
@@ -2391,13 +2413,13 @@ static int msm_pcm_channel_mixer_weight_ctl_put(
 	}
 
 	chmixer_pspd = &(pdata->chmixer_pspd[fe_id][session_type]);
-	if (channel <= 0 || channel > PCM_FORMAT_MAX_NUM_CHANNEL) {
+	if (channel <= 0 || channel > PCM_FORMAT_MAX_NUM_CHANNEL_V2) {
 		pr_err("%s: invalid channel number %d\n", __func__, channel);
 		return -EINVAL;
 	}
 
 	channel--;
-	for (i = 0; i < PCM_FORMAT_MAX_NUM_CHANNEL; i++)
+	for (i = 0; i < PCM_FORMAT_MAX_NUM_CHANNEL_V2; i++)
 		chmixer_pspd->channel_weight[channel][i] =
 			ucontrol->value.integer.value[i];
 	return 0;
@@ -2427,14 +2449,14 @@ static int msm_pcm_channel_mixer_weight_ctl_get(
 		return -EINVAL;
 	}
 
-	if (channel <= 0 || channel > PCM_FORMAT_MAX_NUM_CHANNEL) {
+	if (channel <= 0 || channel > PCM_FORMAT_MAX_NUM_CHANNEL_V2) {
 		pr_err("%s: invalid channel number %d\n", __func__, channel);
 		return -EINVAL;
 	}
 
 	channel--;
 	chmixer_pspd = &(pdata->chmixer_pspd[fe_id][session_type]);
-	for (i = 0; i < PCM_FORMAT_MAX_NUM_CHANNEL; i++)
+	for (i = 0; i < PCM_FORMAT_MAX_NUM_CHANNEL_V2; i++)
 		ucontrol->value.integer.value[i] =
 			chmixer_pspd->channel_weight[channel][i];
 	return 0;
@@ -2884,7 +2906,7 @@ static int msm_pcm_add_channel_mixer_controls(struct snd_soc_pcm_runtime *rtd)
 		pr_err("%s: pcm add channel mixer output map controls failed:%d\n",
 				__func__, ret);
 
-	for (i = 1; i <= PCM_FORMAT_MAX_NUM_CHANNEL; i++)
+	for (i = 1; i <= PCM_FORMAT_MAX_NUM_CHANNEL_V2; i++)
 		ret |=  msm_pcm_add_channel_mixer_weight_controls(rtd, i);
 	if (ret)
 		pr_err("%s: pcm add channel mixer weight controls failed:%d\n",
