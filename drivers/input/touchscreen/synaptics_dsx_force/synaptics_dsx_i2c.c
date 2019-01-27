@@ -2,10 +2,10 @@
  * Synaptics DSX touchscreen driver
  *
  * Copyright (C) 2012-2015 Synaptics Incorporated. All rights reserved.
+ * Copyright (C) 2018 XiaoMi, Inc.
  *
  * Copyright (C) 2012 Alexandra Chin <alexandra.chin@tw.synaptics.com>
  * Copyright (C) 2012 Scott Lin <scott.lin@tw.synaptics.com>
- * Copyright (C) 2018 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -336,6 +336,7 @@ static int parse_dt(struct device *dev, struct synaptics_dsx_board_data *bdata)
 		dev_err(dev, "Cannot get config array size\n");
 		return retval;
 	}
+
 
 	bdata->config_array = devm_kzalloc(dev, bdata->config_array_size *
 					sizeof(struct synaptics_dsx_config_info), GFP_KERNEL);
@@ -1083,7 +1084,7 @@ MODULE_DEVICE_TABLE(of, synaptics_rmi4_of_match_table_force);
 
 static struct i2c_driver synaptics_rmi4_i2c_driver = {
 	.driver = {
-		.name = "synaptics_dsi_force",
+		.name = "synaptics_dsi_force", //I2C_DRIVER_NAME,
 		.owner = THIS_MODULE,
 		.of_match_table = synaptics_rmi4_of_match_table_force,
 	},
