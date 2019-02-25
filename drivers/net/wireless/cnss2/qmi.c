@@ -25,6 +25,7 @@
 #define MAX_BDF_FILE_NAME		11
 #define DEFAULT_BDF_FILE_NAME		"bdwlan.elf"
 #define BDF_FILE_NAME_PREFIX		"bdwlan.e"
+#define DEFAULT_BIN_BDF_FILE_NAME       "bdwlan.bin"
 
 #ifdef CONFIG_CNSS2_DEBUG
 static unsigned int qmi_timeout = 10000;
@@ -164,8 +165,9 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 	req.num_clients = daemon_support ? 2 : 1;
 	cnss_pr_dbg("Number of clients is %d\n", req.num_clients);
 
-	req.wake_msi = cnss_bus_get_wake_irq(plat_priv);
-	if (req.wake_msi) {
+	ret = cnss_bus_get_wake_irq(plat_priv);
+	if (ret > 0) {
+		req.wake_msi = ret;
 		cnss_pr_dbg("WAKE MSI base data is %d\n", req.wake_msi);
 		req.wake_msi_valid = 1;
 	}
@@ -238,6 +240,10 @@ static int cnss_wlfw_ind_register_send_sync(struct cnss_plat_data *plat_priv)
 	req.fw_init_done_enable = 1;
 	req.pin_connect_result_enable_valid = 1;
 	req.pin_connect_result_enable = 1;
+	req.initiate_cal_download_enable_valid = 1;
+	req.initiate_cal_download_enable = 1;
+	req.initiate_cal_update_enable_valid = 1;
+	req.initiate_cal_update_enable = 1;
 
 	req_desc.max_msg_len = WLFW_IND_REGISTER_REQ_MSG_V01_MAX_MSG_LEN;
 	req_desc.msg_id = QMI_WLFW_IND_REGISTER_REQ_V01;
@@ -267,6 +273,13 @@ static int cnss_wlfw_ind_register_send_sync(struct cnss_plat_data *plat_priv)
 out:
 	CNSS_ASSERT(0);
 	return ret;
+}
+
+static int cnss_qmi_initiate_cal_update_ind_hdlr(
+					 struct cnss_plat_data *plat_priv,
+					 void *msg, unsigned int msg_len)
+{
+	return 0;
 }
 
 static int cnss_wlfw_request_mem_ind_hdlr(struct cnss_plat_data *plat_priv,
@@ -498,6 +511,7 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv)
 	const u8 *temp;
 	unsigned int remaining;
 	int ret = 0;
+	enum cnss_bdf_type bdf_type = CNSS_BDF_ELF;
 
 	cnss_pr_dbg("Sending BDF download message, state: 0x%lx\n",
 		    plat_priv->driver_state);
@@ -508,8 +522,18 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv)
 		goto out;
 	}
 
+	if (plat_priv->device_id == QCN7605_DEVICE_ID ||
+	    plat_priv->device_id == QCN7605_COMPOSITE_DEVICE_ID ||
+	    plat_priv->device_id == QCN7605_STANDALONE_DEVICE_ID)
+		bdf_type = CNSS_BDF_BIN;
+
 	if (plat_priv->board_info.board_id == 0xFF)
-		snprintf(filename, sizeof(filename), DEFAULT_BDF_FILE_NAME);
+		if (bdf_type == CNSS_BDF_BIN)
+			snprintf(filename, sizeof(filename),
+				 DEFAULT_BIN_BDF_FILE_NAME);
+		else
+			snprintf(filename, sizeof(filename),
+				 DEFAULT_BDF_FILE_NAME);
 	else
 		snprintf(filename, sizeof(filename),
 			 BDF_FILE_NAME_PREFIX "%02x",
@@ -554,7 +578,7 @@ bypass_bdf:
 		req->data_valid = 1;
 		req->end_valid = 1;
 		req->bdf_type_valid = 1;
-		req->bdf_type = CNSS_BDF_ELF;
+		req->bdf_type = bdf_type;
 
 		if (remaining > QMI_WLFW_MAX_DATA_SIZE_V01) {
 			req->data_len = QMI_WLFW_MAX_DATA_SIZE_V01;
@@ -941,6 +965,11 @@ out:
 	return ret;
 }
 
+int cnss_wlfw_cal_report_send_sync(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
 static void cnss_wlfw_clnt_ind(struct qmi_handle *handle,
 			       unsigned int msg_id, void *msg,
 			       unsigned int msg_len, void *ind_cb_priv)
@@ -976,6 +1005,9 @@ static void cnss_wlfw_clnt_ind(struct qmi_handle *handle,
 		break;
 	case QMI_WLFW_PIN_CONNECT_RESULT_IND_V01:
 		cnss_qmi_pin_result_ind_hdlr(plat_priv, msg, msg_len);
+		break;
+	case QMI_WLFW_INITIATE_CAL_UPDATE_IND_V01:
+		cnss_qmi_initiate_cal_update_ind_hdlr(plat_priv, msg, msg_len);
 		break;
 	default:
 		cnss_pr_err("Invalid QMI WLFW indication, msg_id: 0x%x\n",

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -14,6 +14,8 @@
 #include <linux/of_address.h>
 #include <linux/debugfs.h>
 #include <linux/memblock.h>
+#include <soc/qcom/early_domain.h>
+#include <linux/suspend.h>
 
 #include "msm_drv.h"
 #include "msm_mmu.h"
@@ -26,6 +28,7 @@
 #include "dsi_display.h"
 #include "sde_hdmi.h"
 #include "sde_crtc.h"
+#include "sde_plane.h"
 
 #define MDP_SSPP_TOP0_OFF		0x1000
 #define DISP_INTF_SEL			0x004
@@ -39,6 +42,8 @@
 #define SDE_LK_RUNNING_VALUE		0xC001CAFE
 #define SDE_LK_STOP_SPLASH_VALUE	0xDEADDEAD
 #define SDE_LK_EXIT_VALUE		0xDEADBEEF
+#define SDE_LK_INTERMEDIATE_STOP	0xBEEFBEEF
+#define SDE_LK_KERNEL_SPLASH_TALK_LOOP	20
 
 #define INTF_HDMI_SEL                  (BIT(25) | BIT(24))
 #define INTF_DSI0_SEL                  BIT(8)
@@ -63,49 +68,6 @@ static void _sde_splash_free_bootup_memory_to_system(phys_addr_t phys,
 
 	for (pfn_idx = pfn_start; pfn_idx < pfn_end; pfn_idx++)
 		free_reserved_page(pfn_to_page(pfn_idx));
-}
-
-static int _sde_splash_parse_dt_get_lk_pool_node(struct drm_device *dev,
-					struct sde_splash_info *sinfo)
-{
-	struct device_node *parent, *node;
-	struct resource r;
-	int ret = 0;
-
-	if (!sinfo)
-		return -EINVAL;
-
-	parent = of_find_node_by_path("/reserved-memory");
-	if (!parent)
-		return -EINVAL;
-
-	node = of_find_node_by_name(parent, "lk_pool");
-	if (!node) {
-		SDE_ERROR("mem reservation for lk_pool is not presented\n");
-		ret = -EINVAL;
-		goto parent_node_err;
-	}
-
-	/* find the mode */
-	if (of_address_to_resource(node, 0, &r)) {
-		ret = -EINVAL;
-		goto child_node_err;
-	}
-
-	sinfo->lk_pool_paddr = (dma_addr_t)r.start;
-	sinfo->lk_pool_size = r.end - r.start;
-
-	DRM_INFO("lk_pool: addr:%pK, size:%pK\n",
-			(void *)sinfo->lk_pool_paddr,
-			(void *)sinfo->lk_pool_size);
-
-child_node_err:
-	of_node_put(node);
-
-parent_node_err:
-	of_node_put(parent);
-
-	return ret;
 }
 
 static int _sde_splash_parse_dt_get_display_node(struct drm_device *dev,
@@ -182,10 +144,9 @@ error:
 	return -ENOMEM;
 }
 
-static bool _sde_splash_lk_check(struct sde_hw_intr *intr)
+static bool _sde_splash_lk_check(void)
 {
-	return (SDE_LK_RUNNING_VALUE == SDE_REG_READ(&intr->hw,
-			SCRATCH_REGISTER_1)) ? true : false;
+	return get_early_service_status(EARLY_DISPLAY);
 }
 
 /**
@@ -193,10 +154,37 @@ static bool _sde_splash_lk_check(struct sde_hw_intr *intr)
  *
  * Function to stop early splash in LK.
  */
-static inline void _sde_splash_notify_lk_stop_splash(struct sde_hw_intr *intr)
+static inline void _sde_splash_notify_lk_stop_splash(void)
 {
-	/* write splash stop signal to scratch register*/
-	SDE_REG_WRITE(&intr->hw, SCRATCH_REGISTER_1, SDE_LK_STOP_SPLASH_VALUE);
+	int i = 0;
+	int32_t *scratch_pad = NULL;
+
+	/* request Lk to stop splash */
+	request_early_service_shutdown(EARLY_DISPLAY);
+
+	/*
+	 * Before next proceeding, kernel needs to check bootloader's
+	 * intermediate status to ensure LK's concurrent flush is done.
+	 */
+	while (i++ < SDE_LK_KERNEL_SPLASH_TALK_LOOP) {
+
+		scratch_pad =
+			(int32_t *)get_service_shared_mem_start(EARLY_DISPLAY);
+
+		if (scratch_pad) {
+			if ((*scratch_pad != SDE_LK_INTERMEDIATE_STOP) &&
+				(_sde_splash_lk_check())) {
+				DRM_INFO("wait for LK's intermediate ack\n");
+				msleep(20);
+			} else {
+				SDE_DEBUG("received LK intermediate ack\n");
+				break;
+			}
+		}
+	}
+
+	if (i == SDE_LK_KERNEL_SPLASH_TALK_LOOP)
+		SDE_ERROR("Loop talk for LK and Kernel failed\n");
 }
 
 static int _sde_splash_gem_new(struct drm_device *dev,
@@ -354,7 +342,7 @@ static int _sde_splash_free_module_resource(struct msm_mmu *mmu,
 		if (!msm_obj)
 			return -EINVAL;
 
-		if (mmu->funcs && mmu->funcs->unmap)
+		if (mmu->funcs && mmu->funcs->early_splash_unmap)
 			mmu->funcs->early_splash_unmap(mmu,
 				sinfo->splash_mem_paddr[i], msm_obj->sgt);
 
@@ -389,6 +377,28 @@ static bool _sde_splash_validate_commit(struct sde_kms *sde_kms,
 	}
 
 	return false;
+}
+
+static void _sde_splash_update_property(struct sde_kms *sde_kms)
+{
+	struct drm_device *dev = sde_kms->dev;
+	struct drm_crtc *crtc;
+	struct drm_plane *plane;
+	struct sde_mdss_cfg *catalog = sde_kms->catalog;
+
+	/*
+	 * Update plane availability property
+	 * after splash handoff is done.
+	 */
+	drm_for_each_plane(plane, dev) {
+		sde_plane_update_blob_property(plane,
+					"plane_unavailability=", 0);
+	}
+
+	/* update crtc blend stage property */
+	drm_for_each_crtc(crtc, dev)
+		sde_crtc_update_blob_property(crtc, "max_blendstages=",
+					catalog->max_mixer_blendstages);
 }
 
 __ref int sde_splash_init(struct sde_power_handle *phandle, struct msm_kms *kms)
@@ -479,12 +489,6 @@ int sde_splash_parse_memory_dt(struct drm_device *dev)
 		SDE_ERROR("get display node failed\n");
 		return -EINVAL;
 	}
-
-	if (_sde_splash_parse_dt_get_lk_pool_node(dev, sinfo)) {
-		SDE_ERROR("get LK pool node failed\n");
-		return -EINVAL;
-	}
-
 	return 0;
 }
 
@@ -501,7 +505,8 @@ static inline u32 _sde_splash_parse_sspp_id(struct sde_mdss_cfg *cfg,
 	return 0;
 }
 
-int sde_splash_parse_reserved_plane_dt(struct sde_splash_info *splash_info,
+int sde_splash_parse_reserved_plane_dt(struct drm_device *dev,
+				struct sde_splash_info *splash_info,
 				struct sde_mdss_cfg *cfg)
 {
 	struct device_node *parent, *node;
@@ -512,7 +517,8 @@ int sde_splash_parse_reserved_plane_dt(struct sde_splash_info *splash_info,
 	if (!splash_info || !cfg)
 		return -EINVAL;
 
-	parent = of_find_node_by_path("/qcom,sde-reserved-plane");
+	parent = of_get_child_by_name(dev->dev->of_node,
+			"qcom,sde-reserved-plane");
 	if (!parent)
 		return -EINVAL;
 
@@ -648,7 +654,7 @@ int sde_splash_smmu_map(struct drm_device *dev, struct msm_mmu *mmu,
 	for (i = 0; i < sinfo->splash_mem_num; i++) {
 		msm_obj = to_msm_bo(sinfo->obj[i]);
 
-		if (mmu->funcs && mmu->funcs->map) {
+		if (mmu->funcs && mmu->funcs->early_splash_map) {
 			ret = mmu->funcs->early_splash_map(mmu,
 				sinfo->splash_mem_paddr[i], msm_obj->sgt,
 				IOMMU_READ | IOMMU_NOEXEC);
@@ -758,9 +764,9 @@ bool sde_splash_get_lk_complete_status(struct msm_kms *kms)
 
 	if (sde_kms->splash_info.handoff &&
 		!sde_kms->splash_info.display_splash_enabled &&
-		SDE_LK_EXIT_VALUE == SDE_REG_READ(&intr->hw,
-					SCRATCH_REGISTER_1)) {
-		SDE_DEBUG("LK totoally exits\n");
+		!sde_kms->splash_info.early_display_enabled &&
+		!_sde_splash_lk_check()) {
+		SDE_DEBUG("LK totally exits\n");
 		return true;
 	}
 
@@ -818,10 +824,6 @@ int sde_splash_free_resource(struct msm_kms *kms,
 
 		_sde_splash_destroy_splash_node(sinfo);
 
-		/* free lk_pool heap memory */
-		_sde_splash_free_bootup_memory_to_system(sinfo->lk_pool_paddr,
-						sinfo->lk_pool_size);
-
 		/* withdraw data bus vote */
 		sde_power_data_bus_bandwidth_ctrl(phandle,
 					sde_kms->core_client, false);
@@ -833,6 +835,9 @@ int sde_splash_free_resource(struct msm_kms *kms,
 		 */
 		sde_power_resource_enable(phandle,
 					sde_kms->core_client, false);
+
+		/* update impacted crtc and plane property by splash */
+		_sde_splash_update_property(sde_kms);
 
 		/* send uevent to notify user to recycle resource */
 		_sde_splash_sent_pipe_update_uevent(sde_kms);
@@ -939,21 +944,24 @@ int sde_splash_lk_stop_splash(struct msm_kms *kms,
 
 	sinfo = &sde_kms->splash_info;
 
-	if (!sinfo) {
-		SDE_ERROR("%s(%d): invalid splash info\n", __func__, __LINE__);
-		return -EINVAL;
-	}
-
 	/* Monitor LK's status and tell it to exit. */
 	mutex_lock(&sde_splash_lock);
 	if (_sde_splash_validate_commit(sde_kms, state) &&
 			sinfo->display_splash_enabled) {
-		if (_sde_splash_lk_check(sde_kms->hw_intr))
-			_sde_splash_notify_lk_stop_splash(sde_kms->hw_intr);
+		if (_sde_splash_lk_check()) {
+			_sde_splash_notify_lk_stop_splash();
+			error = _sde_splash_clear_mixer_blendstage(kms, state);
+		}
 
-		sinfo->display_splash_enabled = false;
-
-		error = _sde_splash_clear_mixer_blendstage(kms, state);
+		if (get_hibernation_status() == true) {
+			sinfo->display_splash_enabled = false;
+		} else {
+			/* preserve the display_splash_enabled state for
+			 * case when system is restoring from hibernation
+			 * image and splash is enabled.
+			 */
+			sinfo->display_splash_enabled = true;
+		}
 	}
 	mutex_unlock(&sde_splash_lock);
 
