@@ -10,6 +10,7 @@
 #include <linux/bug.h>
 #include <linux/kernel.h>
 #include <linux/rculist.h>
+#include <linux/bug.h>
 
 /*
  * Check that the data structures for the list manipulations are reasonably
