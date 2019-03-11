@@ -1357,7 +1357,7 @@ config SCHED_TUNE
 
 config DYNAMIC_STUNE_BOOST
 	bool "Dynamic SchedTune boosting support"
-	depends on SCHED_TUNE && CGROUP_SCHEDTUNE
+	depends on SCHED_TUNE && CGROUP_SCHEDTUNE && !SCHED_HMP && CPU_INPUT_BOOST
 	help
 	  This option extends the SchedTune framework and provides APIs to
 	  activate and reset SchedTune boosting from anywhere in the kernel.
