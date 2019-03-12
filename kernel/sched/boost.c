@@ -111,7 +111,6 @@ enum sched_boost_policy sched_boost_policy(void)
 static int boost_slot;
 #endif // CONFIG_DYNAMIC_STUNE_BOOST
 
-#if defined CONFIG_SCHED_HMP || defined CONFIG_DYNAMIC_STUNE_BOOST
 static bool verify_boost_params(int old_val, int new_val)
 {
 	/*
@@ -121,7 +120,6 @@ static bool verify_boost_params(int old_val, int new_val)
 	 */
 	return !(!!old_val == !!new_val);
 }
-#endif
 
 #ifdef CONFIG_SCHED_HMP
 static void _sched_set_boost(int old_val, int type)
@@ -216,26 +214,19 @@ int sched_boost_handler(struct ctl_table *table, int write,
 	if (ret || !write)
 		goto done;
 
-#ifdef CONFIG_SCHED_HMP
 	if (verify_boost_params(old_val, *data)) {
+#if defined CONFIG_SCHED_HMP
 		_sched_set_boost(old_val, *data);
-	} else {
-		*data = old_val;
-		ret = -EINVAL;
-	}
-#endif
-
-#ifdef CONFIG_DYNAMIC_STUNE_BOOST
-	if (verify_boost_params(old_val, *data)) {
+#elif defined CONFIG_DYNAMIC_STUNE_BOOST
 		if (*data > 0)
 			do_stune_sched_boost("top-app", &boost_slot);
 		else
 			reset_stune_boost("top-app", boost_slot);
+#endif
 	} else {
 		*data = old_val;
 		ret = -EINVAL;
 	}
-#endif // CONFIG_DYNAMIC_STUNE_BOOST
 
 done:
 #ifdef CONFIG_SCHED_HMP
